@@ -7,7 +7,7 @@ then emailing an external client means confidential data can leak
 into the email — even if the email body itself looks harmless.
 """
 
-from sentinel import Decision, SessionContext
+from sentinel import Decision, Scope, SessionContext
 
 
 class TestOperationChainLeak:
@@ -138,6 +138,30 @@ class TestAttachmentCheck:
                 "body": "...",
                 "attachment": "/tmp/random-file.txt",
             },
+            context=ctx,
+        )
+        assert result.decision == Decision.ALLOW
+
+
+class TestCrossContextBoundary:
+    """Explicit conversation context boundary checks."""
+
+    def test_internal_context_to_external_recipient_blocked(self, world):
+        # User just discussed internal details, then attempts external send.
+        ctx = SessionContext(source_scope=Scope.INTERNAL)
+        result = world.verify(
+            "send_email",
+            {"to": "tom@acme.com", "subject": "Quick summary", "body": "..."},
+            context=ctx,
+        )
+        assert result.decision == Decision.BLOCK
+        assert "context boundary" in result.explanation.lower()
+
+    def test_internal_context_to_internal_recipient_allowed(self, world):
+        ctx = SessionContext(source_scope=Scope.INTERNAL)
+        result = world.verify(
+            "send_email",
+            {"to": "alice@mycompany.com", "subject": "Internal summary", "body": "..."},
             context=ctx,
         )
         assert result.decision == Decision.ALLOW

@@ -71,6 +71,10 @@ class Document:
     doc_type: str = "file"
     sensitivity: Sensitivity = Sensitivity.INTERNAL
     scope: Scope = Scope.INTERNAL
+    # Seed/policy helpers: HR_ONLY, UNTRUSTED, INTERNAL_ONLY, PARTNER_OK, ...
+    audience: Optional[str] = None
+    # For mail-thread entities: HIGH marks protected threads (e.g. legal).
+    thread_importance: Optional[str] = None
 
 
 @dataclass
@@ -101,4 +105,8 @@ class VerificationResult:
 class SessionContext:
     current_project: Optional[str] = None
     current_group: Optional[str] = None
-    data_sources: set = field(default_factory=set)
+    # Tracks document/entity ids read during this session.
+    data_sources: set[str] = field(default_factory=set)
+    # Optional explicit source context scope for the current conversation/workflow.
+    # Example: internal discussion context later attempting an external send.
+    source_scope: Optional[Scope] = None

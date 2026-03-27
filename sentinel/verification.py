@@ -7,6 +7,7 @@ from sentinel.models import (
     Decision,
     EntityStatus,
     ResolvedEntity,
+    Scope,
     SessionContext,
     VerificationResult,
 )
@@ -160,16 +161,134 @@ class DataFlowVerifier:
                 if contact is None:
                     continue
 
-                if doc.scope > contact.scope:
-                    return VerificationResult(
-                        decision=Decision.BLOCK,
-                        explanation=(
-                            f"Session data includes '{doc.title}' "
-                            f"(scope={doc.scope.name}). "
-                            f"Cannot send to '{contact.name}' "
-                            f"(scope={contact.scope.name})."
-                        ),
-                        target=recipient,
-                    )
+                violation = self._check_doc_to_contact(doc, contact, recipient)
+                if violation:
+                    return violation
+
+        return None
+
+    def _check_doc_to_contact(
+        self,
+        doc,
+        contact,
+        recipient: ResolvedEntity,
+    ) -> Optional[VerificationResult]:
+        aud = doc.audience or ""
+
+        # --- Audience-specific restrictions (always checked first) ---
+
+        if aud == "HR_ONLY":
+            role = (contact.role or "").lower()
+            is_hr = any(kw in role for kw in ("hr", "people", "human resource"))
+            if not is_hr:
+                return VerificationResult(
+                    decision=Decision.BLOCK,
+                    explanation=(
+                        f"HR-only material '{doc.title}' cannot be shared with "
+                        f"'{contact.name}' (role={contact.role!r})."
+                    ),
+                    target=recipient,
+                )
+
+        if aud == "UNTRUSTED" and contact.scope == Scope.EXTERNAL:
+            return VerificationResult(
+                decision=Decision.BLOCK,
+                explanation=(
+                    f"Content derived from untrusted source '{doc.title}' "
+                    f"must not be sent externally (recipient '{contact.name}')."
+                ),
+                target=recipient,
+            )
+
+        # --- Audience-based exemptions (override scope check) ---
+
+        if aud == "COUNSEL_OK":
+            role = (contact.role or "").lower()
+            if any(kw in role for kw in ("lawyer", "counsel", "attorney", "legal")):
+                return None
+
+        if aud in ("PARTNER_OK",):
+            return None
+
+        # --- Default: scope-based check ---
+
+        if doc.scope > contact.scope:
+            return VerificationResult(
+                decision=Decision.BLOCK,
+                explanation=(
+                    f"Session data includes '{doc.title}' "
+                    f"(scope={doc.scope.name}). "
+                    f"Cannot send to '{contact.name}' "
+                    f"(scope={contact.scope.name})."
+                ),
+                target=recipient,
+            )
+
+        return None
+
+
+class DeleteThreadVerifier:
+    """Block or clarify auto-delete of high-value threads."""
+
+    def __init__(self, world: WorldModel) -> None:
+        self.world = world
+
+    def verify(
+        self, tool_name: str, tool_args: dict
+    ) -> Optional[VerificationResult]:
+        if tool_name != "delete_email_thread":
+            return None
+        thread_id = tool_args.get("thread_id") or tool_args.get("path") or ""
+        path = thread_id if str(thread_id).startswith("/") else f"/mail/threads/{thread_id}"
+        doc = self.world.find_document_by_path(path)
+        if doc is None:
+            return VerificationResult(
+                decision=Decision.ALLOW,
+                explanation="Thread not in policy model; no high-value rule applied.",
+            )
+        if (doc.thread_importance or "").upper() == "HIGH":
+            return VerificationResult(
+                decision=Decision.CLARIFY,
+                explanation=(
+                    f"Thread '{doc.title}' is marked high-importance (ongoing legal matter). "
+                    f"Confirm before deleting."
+                ),
+            )
+        return VerificationResult(decision=Decision.ALLOW, explanation="Delete allowed.")
+
+
+class ContextBoundaryVerifier:
+    """Check explicit source-context scope against outbound recipients."""
+
+    def __init__(self, world: WorldModel) -> None:
+        self.world = world
+
+    def verify(
+        self,
+        recipients: list[ResolvedEntity],
+        context: Optional[SessionContext],
+    ) -> Optional[VerificationResult]:
+        if context is None or context.source_scope is None:
+            return None
+
+        for recipient in recipients:
+            if recipient.entity_id is None:
+                continue
+            contact = self.world.get_contact(recipient.entity_id)
+            if contact is None:
+                continue
+
+            # Explicit context boundary policy:
+            # data from a more restricted source scope cannot flow to less restricted target.
+            if context.source_scope > contact.scope:
+                return VerificationResult(
+                    decision=Decision.BLOCK,
+                    explanation=(
+                        f"Context boundary violation: source context scope="
+                        f"{context.source_scope.name} cannot send to "
+                        f"'{contact.name}' (scope={contact.scope.name})."
+                    ),
+                    target=recipient,
+                )
 
         return None

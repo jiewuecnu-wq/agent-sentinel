@@ -10,12 +10,14 @@ TOOL_RECIPIENT_PARAMS: dict[str, list[str]] = {
     "send_message": ["to"],
     "forward_message": ["to"],
     "forward_email": ["to"],
+    "share_files": ["to"],
 }
 
 TOOL_FILE_PARAMS: dict[str, list[str]] = {
     "read_file": ["path"],
     "write_file": ["path"],
     "send_email": ["attachment"],
+    "share_files": ["paths"],
 }
 
 
@@ -98,6 +100,11 @@ class EntityResolver:
         resolved = []
         for param in param_names:
             value = tool_args.get(param)
-            if value:
-                resolved.append(self.resolve_file(value))
+            if not value:
+                continue
+            if isinstance(value, (list, tuple)):
+                for item in value:
+                    resolved.append(self.resolve_file(str(item)))
+            else:
+                resolved.append(self.resolve_file(str(value)))
         return resolved

@@ -12,11 +12,30 @@ from sentinel.models import (
     VerificationResult,
 )
 from sentinel.resolver import EntityResolver
-from sentinel.verification import DataFlowVerifier, RecipientVerifier
+from sentinel.verification import (
+    ContextBoundaryVerifier,
+    DataFlowVerifier,
+    DeleteThreadVerifier,
+    RecipientVerifier,
+)
 from sentinel.world import WorldModel
 
-RECIPIENT_TOOLS = {"send_email", "send_message", "forward_message", "forward_email"}
-READ_TOOLS = {"read_file", "read_email", "fetch_url"}
+RECIPIENT_TOOLS = {
+    "send_email",
+    "send_message",
+    "forward_message",
+    "forward_email",
+    "share_files",
+}
+READ_TOOLS = {
+    "read_file",
+    "read_email",
+    "fetch_url",
+    "search_mail",
+    "search_contacts",
+    "list_files",
+}
+DELETE_TOOLS = {"delete_email_thread"}
 
 
 class Sentinel:
@@ -37,6 +56,8 @@ class Sentinel:
         self.resolver = EntityResolver(self.world)
         self.recipient_verifier = RecipientVerifier(self.world)
         self.flow_verifier = DataFlowVerifier(self.world)
+        self.context_verifier = ContextBoundaryVerifier(self.world)
+        self.delete_verifier = DeleteThreadVerifier(self.world)
 
     def verify(
         self,
@@ -57,6 +78,11 @@ class Sentinel:
                 decision=Decision.ALLOW,
                 explanation="Read operation recorded.",
             )
+
+        # --- Destructive / high-value thread policies ---
+        if tool_name in DELETE_TOOLS:
+            dr = self.delete_verifier.verify(tool_name, tool_args)
+            return dr
 
         # --- Non-recipient tools: nothing to verify yet ---
         if tool_name not in RECIPIENT_TOOLS:
@@ -87,6 +113,11 @@ class Sentinel:
         flow_result = self.flow_verifier.verify(resolved_recipients, data_sources)
         if flow_result:
             all_results.append(flow_result)
+
+        # Explicit context-boundary verification (conversation/workflow scope)
+        context_result = self.context_verifier.verify(resolved_recipients, context)
+        if context_result:
+            all_results.append(context_result)
 
         # Return the most severe result
         blocks = [r for r in all_results if r.decision == Decision.BLOCK]
