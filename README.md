@@ -4,79 +4,80 @@
 
 ---
 
+## Motivation
+
+Agents often fail not because an action is obviously unsafe,  
+but because they execute actions on the **wrong targets under ambiguous grounding**.
+
+These failures are subtle:
+- Sending a message to the wrong contact  
+- Sharing a file with the wrong recipient  
+- Acting on the wrong thread or resource  
+
+From the system's perspective, these actions appear valid.  
+From the user's perspective, they are costly mistakes.
+
+---
+
 ## The Problem
 
-Agents often fail **not because an action is obviously unsafe**,  
-but because it is grounded to the **wrong entity**.
+This is not merely an entity recognition or linking problem.
 
-Examples:
-- Sending a message to the wrong *John*
-- Sharing a document with the wrong contact
-- Deleting the wrong email thread
+The core challenge is:
 
-These actions look perfectly valid at the API level,  
-yet can still cause costly mistakes.
+> **How should an agent decide whether to execute an action when the target is ambiguous and the context is incomplete?**
 
-Traditional safeguards focus on:
-- permission control
-- sandboxing
-- explicit confirmations
+At the moment of execution, the agent must reason about:
+- what the action is actually targeting  
+- whether the grounding is uncertain  
+- whether the current context increases risk  
 
-But they miss a critical issue:
-
-> **The agent may not know what it is actually acting on.**
+This turns the problem into **action-time verification under uncertainty**,  
+rather than static entity resolution.
 
 ---
 
 ## Core Idea
 
-Before executing an external action, an agent should verify:
+Before executing any external action, the system performs a verification step:
 
-1. **What entity is this action targeting?**
-2. **Is the grounding ambiguous?**
-3. **Does the current context increase risk?**
+- Identify candidate targets from the agent's internal world
+- Evaluate ambiguity and contextual consistency
+- Estimate potential risk given current session state
 
-Based on this, the system decides:
+Then decide:
 
-- ✅ **Allow** — safe and unambiguous  
-- ❓ **Clarify** — entity is ambiguous, needs disambiguation  
-- ⛔ **Block** — high-risk or inconsistent with context  
+- ✅ **Allow** — target is clear and consistent  
+- ❓ **Clarify** — ambiguity is present, needs disambiguation  
+- ⛔ **Block** — action is high-risk or contextually inconsistent  
 
 ---
 
-## Example
+## Key Insight
 
-User instruction:
+The most dangerous failures in agent systems are often **silent failures**:
 
-> "Send John a quick update that the meeting moved to 3pm."
+> Actions that look correct, but operate on the wrong target.
 
-System state:
-
-- Multiple contacts named *John*
-- One is CEO, one is teammate, one is external lawyer
-- Recent context includes sensitive project information
-
-Instead of executing immediately, the system may:
-
-- ❓ Clarify: *"Do you mean John Chen (teammate) or John Smith (CEO)?"*
-- ⛔ Block: if sensitive content is being sent externally
+Preventing these failures requires more than permissions or sandboxing.  
+It requires **grounded verification at the moment of action**.
 
 ---
 
 ## What This Is (and Isn't)
 
 **This is NOT:**
-- a traditional entity linking system
-- a static knowledge graph application
-- a generic safety wrapper
+- a traditional entity linking system  
+- a static knowledge graph application  
+- a rule-based safety filter  
 
 **This IS:**
-- a verification layer for **agent actions**
-- a system for handling **ambiguous grounding at execution time**
-- a decision engine for **allow / clarify / block**
+- a verification layer for agent actions  
+- a system for handling ambiguity at execution time  
+- a decision engine for **allow / clarify / block**  
 
-Entity linking and knowledge graphs are **enabling components**,  
-not the end goal.
+Entity linking and knowledge graphs are **supporting components**,  
+not the problem definition.
 
 ---
 
@@ -84,35 +85,17 @@ not the end goal.
 
 The initial version focuses on:
 
-- message / email recipient verification
-- small-scale personal world modeling
-- lightweight grounding + rule-based reasoning
+- recipient verification for messaging/email actions  
+- lightweight personal world modeling  
+- minimal grounding + decision logic  
 
-Future versions may extend to:
-- file sharing
-- tool chains
-- cross-step action verification
-
----
-
-## Why It Matters
-
-In many real-world scenarios, the most dangerous failures are:
-
-> **Silent failures that look correct, but act on the wrong entity.**
-
-Reducing these failures requires more than permission checks —  
-it requires **grounded understanding at action time**.
+Future directions include:
+- file sharing and data flow verification  
+- multi-step action chains  
+- context-aware risk propagation  
 
 ---
 
 ## Status
 
-🚧 Early prototype (v0)  
-Focused on minimal working example and core decision flow.
-
----
-
-## License
-
-MIT
+🚧 Early prototype focused on minimal working example.
