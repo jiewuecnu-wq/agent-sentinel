@@ -173,6 +173,20 @@ python -m pytest tests/ -v
 
 ---
 
+## PhantomPol-20 benchmark (`benchmark/`)
+
+`benchmark/evaluate.py` scores a run’s decisions against PhantomPol-20 ground truth. It expects a JSON array of objects with `case_id`, `decision` (`ALLOW` / `BLOCK` / `CLARIFY`), and optional `reason` (see the script docstring for formats).
+
+```bash
+python benchmark/evaluate.py results_gpt54.json
+python benchmark/evaluate.py results_gpt54.json --verbose
+python benchmark/evaluate.py results_gpt54.json --by-category
+```
+
+**Fixtures:** The evaluator loads **`benchmark/cases.json`** (case definitions, labels, and expected decisions). **`benchmark/world_model.json`** is the matching hidden policy state for the same benchmark (reference for tooling and documentation). Both files are **committed in this repository** next to `evaluate.py`, so a normal `git clone` is enough to run the scorer once you have a results file to pass in.
+
+---
+
 ## Project Structure
 
 ```
@@ -189,12 +203,34 @@ agent-sentinel/
 │   ├── seed_adapter.py       # Loads seed into Sentinel
 │   ├── phase1_case.py        # Case definitions (5 violation + 3 safe)
 │   └── phase1_validate.py    # Runner: OpenAI baseline + Sentinel replay
+├── benchmark/
+│   ├── evaluate.py           # PhantomPol-20 scorer
+│   ├── cases.json            # Case set + ground truth
+│   └── world_model.json      # Hidden policy state (paired with cases)
+├── paper/                     # (local only — drafts / exports; not in git)
 ├── tests/                     # Unit tests (23 tests)
 │   ├── conftest.py
 │   ├── test_scenarios.py     # Recipient, stale contact, scope tests
 │   └── test_dataflow.py      # Data flow, attachment, context boundary tests
 └── requirements.txt
 ```
+
+You may also have **`results*.json`** files at the repository root when you save evaluation outputs; those names are gitignored (see the table in the next section).
+
+---
+
+## Version control and backups
+
+PhantomPol-20 **`benchmark/cases.json`** and **`benchmark/world_model.json`** are **tracked in Git** with the rest of the project.
+
+Other paths are **omitted on purpose** (see `.gitignore`):
+
+| Path | Role |
+|------|------|
+| `paper/` | Paper drafts, figures, archives — kept local until you publish or track them elsewhere. |
+| `results*.json` (repository root) | Typical location for exported evaluation / experiment result files. |
+
+**Local-only paths:** Git does not track `paper/` or root `results*.json`, so clones and remotes will not restore those. Use your usual backups (Time Machine, cloud sync of the project folder, or copies outside the repo) if you care about not losing them.
 
 ---
 
