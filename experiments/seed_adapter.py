@@ -77,6 +77,7 @@ def build_sentinel_from_seed() -> Sentinel:
             sensitivity=_map_sensitivity(d.get("sensitivity", "INTERNAL")),
             audience=d.get("audience"),
             thread_importance=d.get("thread_importance"),
+            content=d.get("content"),
         )
 
     for src, tgt, rel in RELATIONS:

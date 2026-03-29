@@ -7,3 +7,12 @@ build/
 .env
 *.db
 .pytest_cache/
+
+.DS_Store
+
+# Local paper drafts / exports
+/paper/
+
+# Experiment / benchmark run outputs (repo root)
+/results*.json
+

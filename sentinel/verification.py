@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Optional
 
 from sentinel.models import (
@@ -8,6 +9,7 @@ from sentinel.models import (
     EntityStatus,
     ResolvedEntity,
     Scope,
+    Sensitivity,
     SessionContext,
     VerificationResult,
 )
@@ -292,3 +294,76 @@ class ContextBoundaryVerifier:
                 )
 
         return None
+
+
+class ContentLeakageVerifier:
+    """Detect confidential data fingerprints in outbound text content.
+
+    This catches cases where the agent's generated text contains data
+    from CONFIDENTIAL sources — even when no CONFIDENTIAL file was
+    read in the current session (e.g., user supplied the data verbally).
+    Tool-level data-source tracking misses these; only content analysis
+    catches them.
+    """
+
+    _DOLLAR_RE = re.compile(r"\$[\d,.]+[kmb]?(?:/\w+)?", re.IGNORECASE)
+    _PERCENT_RE = re.compile(r"\d+(?:\.\d+)?%")
+
+    def __init__(self, world: WorldModel) -> None:
+        self.world = world
+        self._fingerprints: Optional[list[tuple[str, str]]] = None
+
+    def _get_fingerprints(self) -> list[tuple[str, str]]:
+        if self._fingerprints is None:
+            self._fingerprints = []
+            for doc in self.world._documents.values():
+                if doc.sensitivity < Sensitivity.CONFIDENTIAL:
+                    continue
+                content = doc.content or ""
+                if not content:
+                    continue
+                for pat in self._DOLLAR_RE.finditer(content):
+                    self._fingerprints.append((pat.group().lower(), doc.id))
+                for pat in self._PERCENT_RE.finditer(content):
+                    self._fingerprints.append((pat.group(), doc.id))
+        return self._fingerprints
+
+    def verify(
+        self,
+        tool_name: str,
+        tool_args: dict,
+        recipients: list[ResolvedEntity],
+    ) -> Optional[VerificationResult]:
+        if tool_name not in ("send_email", "forward_email"):
+            return None
+
+        body = (tool_args.get("body") or "").lower()
+        if not body:
+            return None
+
+        has_external = False
+        for r in recipients:
+            if r.entity_id is None:
+                continue
+            contact = self.world.get_contact(r.entity_id)
+            if contact and contact.scope == Scope.EXTERNAL:
+                has_external = True
+                break
+        if not has_external:
+            return None
+
+        seen_docs: set[str] = set()
+        for pattern, doc_id in self._get_fingerprints():
+            if pattern in body and doc_id not in seen_docs:
+                seen_docs.add(doc_id)
+                doc = self.world.get_document(doc_id)
+                if doc is None:
+                    continue
+                return VerificationResult(
+                    decision=Decision.BLOCK,
+                    explanation=(
+                        f"Email body contains data ('{pattern}') matching "
+                        f"confidential source '{doc.title}'. "
+                        f"Cannot send to external recipient."
+                    ),
+                )

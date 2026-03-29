@@ -13,6 +13,7 @@ from sentinel.models import (
 )
 from sentinel.resolver import EntityResolver
 from sentinel.verification import (
+    ContentLeakageVerifier,
     ContextBoundaryVerifier,
     DataFlowVerifier,
     DeleteThreadVerifier,
@@ -57,6 +58,7 @@ class Sentinel:
         self.recipient_verifier = RecipientVerifier(self.world)
         self.flow_verifier = DataFlowVerifier(self.world)
         self.context_verifier = ContextBoundaryVerifier(self.world)
+        self.content_verifier = ContentLeakageVerifier(self.world)
         self.delete_verifier = DeleteThreadVerifier(self.world)
 
     def verify(
@@ -118,6 +120,13 @@ class Sentinel:
         context_result = self.context_verifier.verify(resolved_recipients, context)
         if context_result:
             all_results.append(context_result)
+
+        # Content-level verification (fingerprint scan of outbound text)
+        content_result = self.content_verifier.verify(
+            tool_name, tool_args, resolved_recipients
+        )
+        if content_result:
+            all_results.append(content_result)
 
         # Return the most severe result
         blocks = [r for r in all_results if r.decision == Decision.BLOCK]

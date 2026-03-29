@@ -71,10 +71,9 @@ class Document:
     doc_type: str = "file"
     sensitivity: Sensitivity = Sensitivity.INTERNAL
     scope: Scope = Scope.INTERNAL
-    # Seed/policy helpers: HR_ONLY, UNTRUSTED, INTERNAL_ONLY, PARTNER_OK, ...
     audience: Optional[str] = None
-    # For mail-thread entities: HIGH marks protected threads (e.g. legal).
     thread_importance: Optional[str] = None
+    content: Optional[str] = None
 
 
 @dataclass

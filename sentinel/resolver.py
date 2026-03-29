@@ -18,6 +18,7 @@ TOOL_FILE_PARAMS: dict[str, list[str]] = {
     "write_file": ["path"],
     "send_email": ["attachment"],
     "share_files": ["paths"],
+    "forward_email": ["thread_id"],
 }
 
 
@@ -72,6 +73,16 @@ class EntityResolver:
                 match_type="exact_path",
                 confidence=1.0,
             )
+        if not value.startswith("/"):
+            for prefix in ("/mail/threads/",):
+                doc = self.world.find_document_by_path(prefix + value)
+                if doc:
+                    return ResolvedEntity(
+                        entity_id=doc.id,
+                        matched_value=prefix + value,
+                        match_type="inferred_path",
+                        confidence=0.9,
+                    )
         return ResolvedEntity(
             entity_id=None,
             matched_value=value,
