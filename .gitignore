@@ -11,7 +11,7 @@ build/
 .DS_Store
 
 # Local paper drafts / exports
-/paper/
+# /paper/
 
 # Experiment / benchmark run outputs (repo root)
 /results*.json
