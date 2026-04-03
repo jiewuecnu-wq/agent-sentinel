@@ -13,6 +13,7 @@ import argparse
 import json
 import os
 import sys
+import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -1296,7 +1297,9 @@ def main() -> None:
         print(f"{'='*64}")
 
     results = []
-    for case in cases:
+    for i, case in enumerate(cases):
+        if i > 0:
+            time.sleep(1.0)
         results.append(run_one_case(case, model=args.model, with_sentinel=args.with_sentinel, prompt_mode=args.prompt_mode))
 
     print_summary(results, with_sentinel=args.with_sentinel)
