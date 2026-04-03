@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-PhantomPol-20 Benchmark Evaluator
+PhantomPol-100 Benchmark Evaluator
 
 Scores an enforcement system's decisions against ground truth.
 
@@ -160,7 +160,7 @@ def print_report(report: Dict[str, Any], by_category: bool = False) -> None:
     c = report["counts"]
     b = report.get("baseline", {})
     print("\n" + "=" * 56)
-    print("  PhantomPol-20 Evaluation Report")
+    print("  PhantomPol-100 Evaluation Report")
     print("=" * 56)
     print(f"  Cases evaluated : {report['evaluated']} / {report['total_cases']}")
     if report["missing"]:
@@ -202,7 +202,7 @@ def print_report(report: Dict[str, Any], by_category: bool = False) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Evaluate a results file against PhantomPol-20 ground truth.")
+    parser = argparse.ArgumentParser(description="Evaluate a results file against PhantomPol-100 ground truth.")
     parser.add_argument("results", help="Path to results JSON file.")
     parser.add_argument("--verbose", "-v", action="store_true", help="Print per-case outcomes.")
     parser.add_argument("--by-category", action="store_true", help="Break down results by violation category.")

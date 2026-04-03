@@ -52,9 +52,9 @@
 \begin{abstract}
 AI agents with tool access routinely execute actions that are syntactically valid, semantically reasonable, and sanctioned by the user — yet violate organizational policies because policy-relevant state is not explicitly surfaced into the model's decision pathway. We call this class of failures \emph{policy-invisible violations}: when such state is absent from the execution context, model-only judgment is unreliable, and the violation is only detectable by a system with access to the organizational world model.
 
-We introduce \textbf{PhantomPolicy}, an initial benchmark across seven violation categories, designed so that all tool responses contain only clean data with no policy metadata. We evaluate four frontier models — GPT-4o, GPT-5.4, Claude Sonnet 4.6, and Claude Opus 4.6 — and find that all models exhibit high violation rates (75--100\%) on this benchmark. No model shows consistent, reliable policy enforcement; the few cases where models self-avoid are tied to explicit linguistic cues in the user prompt rather than principled policy reasoning.
+We introduce \textbf{PhantomPolicy}, a benchmark across eight violation categories, designed so that all tool responses contain only clean data with no policy metadata. We release \textbf{PhantomPol-100} (60 violation-ground-truth cases and 40 safe controls) and evaluate four frontier models — GPT-4o, GPT-5.4, Claude Sonnet 4.6, and Claude Opus 4.6. When models comply with the user request rather than self-avoiding, violation rates on the 60 risky cases range from 15\% to 20\%; most violation-ground-truth cases instead end in model self-avoidance (declining or stalling without world-state access), which is inconsistent across models and not a reliable substitute for enforcement.
 
-We further introduce \textbf{Sentinel}, a proof-of-concept enforcement layer that intercepts agent tool calls and verifies them against a policy-aware world model. As a co-designed reference system, Sentinel correctly matches ground truth decisions on PhantomPolicy across all four models with no false positives, providing an existence proof that world-state-grounded enforcement can detect violations that model reasoning alone cannot. These results suggest that policy compliance in enterprise agents should not rely on model reasoning alone, and motivate runtime enforcement with access to organizational world state. Our benchmark, world model, and system are released publicly to support future work in this area.
+We further introduce \textbf{Sentinel}, a proof-of-concept enforcement layer that intercepts agent tool calls and verifies them against a policy-aware world model. Under replay evaluation on PhantomPol-100, Sentinel achieves recall 1.0 on every performed violation for all four models, with 1--2 false positives on the 40 safe controls depending on model (39/40 true negatives for GPT-4o and GPT-5.4; 38/40 for both Claude models). This provides an existence proof that world-state-grounded enforcement can detect violations that model reasoning alone cannot, while surfacing a small co-design gap on safe controls. These results suggest that policy compliance in enterprise agents should not rely on model reasoning alone, and motivate runtime enforcement with access to organizational world state. Our benchmark, world model, and system are released publicly to support future work in this area.
 \end{abstract}
 
 %% ============================================================
@@ -76,14 +76,14 @@ We call this class of failures \textbf{policy-invisible violations}: actions tha
 
 \paragraph{Why this matters.} As AI agents are deployed with tool access in organizational settings, they operate on behalf of users who may not know — or momentarily forget — which data is sensitive or which contacts are active. The policy knowledge that would prevent violations exists in the organization's systems but cannot, in general, be fully included in every model prompt.
 
-A natural response is that stronger models will eventually learn to avoid these failures. Our initial empirical results across four frontier models — with all models exhibiting high violation rates and no consistent relationship between model capability and violation rate — challenge this assumption. The cases where models self-avoid are precisely those where the user's prompt contains explicit linguistic cues. When such cues are absent, models comply without hesitation.
+A natural response is that stronger models will eventually learn to avoid these failures. Our empirical results across four frontier models on PhantomPol-100 challenge this assumption: on the subset of risky cases where the model actually executes the task, raw violation rates span 15--20\% with no consistent ordering by nominal model capability, while the majority of risky cases yield self-avoidance instead. Self-avoidance remains tied to surface cues in the prompt rather than principled policy reasoning over hidden world state.
 
 \paragraph{Contributions.} This paper makes four contributions:
 \begin{enumerate}[noitemsep]
-  \item \textbf{Problem formalization.} We define policy-invisible violations as a distinct failure class and provide a taxonomy of seven violation categories (\S\ref{sec:problem}).
-  \item \textbf{PhantomPolicy benchmark.} An initial benchmark of 12 violation cases and 8 safe controls designed so that all tool responses contain no policy metadata (\S\ref{sec:benchmark}).
-  \item \textbf{Multi-model empirical evidence.} We evaluate GPT-4o, GPT-5.4, Claude Sonnet 4.6, and Claude Opus 4.6 and find consistent, widespread violations across all models (\S\ref{sec:experiments}).
-  \item \textbf{Sentinel.} A co-designed proof-of-concept enforcement layer that correctly identifies all violations with no false positives on PhantomPolicy, providing an existence proof that world-state-grounded enforcement is viable given sufficient world-model coverage — not a claim of general-purpose performance (\S\ref{sec:sentinel}).
+  \item \textbf{Problem formalization.} We define policy-invisible violations as a distinct failure class and provide a taxonomy of eight violation categories (\S\ref{sec:problem}).
+  \item \textbf{PhantomPolicy benchmark.} A benchmark design with an initial 20-case release (12 violations, 8 safe controls) and a scaled 100-case release (60 violations, 40 safe controls), with tool responses containing no policy metadata (\S\ref{sec:benchmark}).
+  \item \textbf{Multi-model empirical evidence.} We evaluate GPT-4o, GPT-5.4, Claude Sonnet 4.6, and Claude Opus 4.6 on PhantomPol-100 and find substantial executed violations whenever models comply, alongside pervasive self-avoidance that is not a dependable enforcement mechanism (\S\ref{sec:experiments}).
+  \item \textbf{Sentinel.} A co-designed proof-of-concept enforcement layer — complementary to general-purpose policy frameworks~\cite{palumbo2026pcas,winston2026solver} — that achieves recall 1.0 on performed violations on PhantomPol-100 with few false positives on safe controls under complete world-model coverage (\S\ref{sec:sentinel}).
 \end{enumerate}
 
 %% ============================================================
@@ -112,12 +112,12 @@ The critical condition is (3): without explicit access to policy-relevant world 
 \subsection{Taxonomy of Violation Categories}
 \label{sec:taxonomy}
 
-We identify seven categories of policy-invisible violations. Table~\ref{tab:taxonomy} defines each category; all seven appear in PhantomPolicy.$^\dagger$
+We identify eight categories of policy-invisible violations. Table~\ref{tab:taxonomy} defines each category; all eight appear in PhantomPolicy.
 
 \begin{table}[h]
 \centering
 \small
-\caption{Taxonomy of policy-invisible violation categories. Each category has one or more cases in PhantomPolicy and a corresponding Sentinel verifier.}
+\caption{Taxonomy of policy-invisible violation categories. Each category has one or more cases in PhantomPolicy and a corresponding Sentinel verifier. Temporal validity is enforced by the RecipientVerifier.}
 \label{tab:taxonomy}
 \begin{tabular}{p{3.4cm} p{5.8cm} p{2.4cm}}
 \toprule
@@ -140,7 +140,7 @@ High-value resource protection & An action (forward or delete) targets a resourc
 \end{tabular}
 \end{table}
 
-\footnotesize{$^\dagger$An eighth category, \emph{Temporal validity} (action targets an inactive contact or expired engagement), is supported by Sentinel's RecipientVerifier and represented in the world model, but no dedicated benchmark case is included in PhantomPolicy v1.}\normalsize
+\footnotesize{Temporal validity (action targets an inactive contact or expired engagement) is supported by Sentinel's RecipientVerifier and represented in the world model. PhantomPol-100 includes seven temporal validity cases.}\normalsize
 
 \subsection{Threat Model}
 
@@ -189,13 +189,13 @@ For each violation case, a corresponding safe \emph{control case} exists that us
 
 The benchmark includes a companion world model with:
 \begin{itemize}[noitemsep]
-  \item \textbf{10 contacts}: 2 internal (one active, one departed), 2 external lawyers (one active, one with expired engagement), and 6 others spanning internal and external scopes
-  \item \textbf{15 documents}: spanning 6 sensitivity/audience types (INTERNAL\_ONLY, CONFIDENTIAL, HR\_ONLY, UNTRUSTED, PARTNER\_OK, EMPLOYEE\_OK)
-  \item \textbf{2 projects}, \textbf{2 groups} (one internal, one partner-facing)
+  \item \textbf{30 contacts}: spanning internal employees, external partners, contractors, lawyers (active and expired), and departed staff across multiple scopes and roles
+  \item \textbf{40 documents}: spanning 6 sensitivity/audience types (INTERNAL\_ONLY, CONFIDENTIAL, HR\_ONLY, UNTRUSTED, PARTNER\_OK, COUNSEL\_OK)
+  \item \textbf{3 projects}, \textbf{4 groups} spanning internal, partner-facing, and cross-functional contexts
   \item \textbf{Policy rules}: scope flow rules, audience restrictions, and high-value action protections
 \end{itemize}
 
-A key design choice is the use of \emph{ambiguous entities}: two contacts named ``John Chen'' (one active, one inactive), two contacts named ``David'' in different roles, and a file named ``Team Reference Sheet'' that contains leveling and compensation guidance restricted to HR and management personnel. These reflect real organizational conditions where policy-relevant distinctions are invisible from surface names alone.
+A key design choice is the use of \emph{ambiguous entities}: three contacts named ``John Chen'' (one inactive external lawyer, one active external lawyer, one active internal legal operations manager), three contacts named ``David'' in different roles (engineer, people operations, product manager), and a file named ``Team Reference Sheet'' that contains leveling and compensation guidance restricted to HR and management personnel. These reflect real organizational conditions where policy-relevant distinctions are invisible from surface names alone.
 
 \subsection{Case Distribution}
 
@@ -217,6 +217,39 @@ Cross-context dataflow         & 1 & 1 & Hard \\
 High-value resource protection & 2 & — & Medium \\
 \midrule
 \textbf{Total}                 & \textbf{12} & \textbf{8} & \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Scaling Protocol: PhantomPol-100}
+
+To support larger-scale evaluation, we extend the benchmark to \textbf{100 cases} while preserving the same design constraints and world-model assumptions. The expanded profile follows a 60/40 split between violation and safe-control cases:
+\begin{itemize}[noitemsep]
+  \item \textbf{60 violation cases} across all eight categories
+  \item \textbf{40 safe controls} mirroring risky action structures with policy-compliant targets
+\end{itemize}
+
+The expansion process uses a fixed authoring protocol: (i) preserve action skeletons, (ii) vary recipient/source/action ambiguity, (iii) keep policy signals hidden from model-visible content, and (iv) validate schema, ratio, and category quotas automatically before evaluation.
+
+\begin{table}[h]
+\centering
+\small
+\caption{PhantomPol-100 case distribution by violation category. Each violation category is paired with safe controls that mirror the action structure with policy-compliant targets.}
+\label{tab:cases100}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Category} & \textbf{Violation} & \textbf{Safe control} \\
+\midrule
+Context boundary               & 8 & 3 \\
+Text-output leakage            & 8 & 6 \\
+Oversharing                    & 8 & 6 \\
+Audience restriction           & 8 & 6 \\
+High-value resource protection & 8 & 3 \\
+Accumulated session leakage    & 7 & 5 \\
+Temporal validity              & 7 & 6 \\
+Cross-context dataflow         & 6 & 5 \\
+\midrule
+\textbf{Total}                 & \textbf{60} & \textbf{40} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -353,115 +386,109 @@ Sentinel decisions (\textsc{Block}, \textsc{Clarify}, \textsc{Allow}) are evalua
 
 \textbf{Replay vs. online intercept.} In our experimental setup, Sentinel operates in \emph{replay mode}: the model runs to completion, producing a full tool call trace, which is then replayed through Sentinel. In a production deployment, Sentinel would operate in \emph{online intercept mode}, blocking the action before it executes and potentially changing the agent's subsequent behavior. Replay mode is sufficient to evaluate Sentinel's detection capability; the distinction matters for studying how blocked actions affect agent follow-up behavior, which we leave to future work.
 
+\paragraph{Primary evaluation scale.} Our main quantitative results use \textbf{PhantomPol-100}: 60 cases with ground truth \textsc{Violation} and 40 safe controls (Table~\ref{tab:results}). The policy-in-prompt ablation in \S\ref{sec:simpler} remains on the initial 20-case pilot (12 violation, 8 safe) where noted.
+
 \subsection{Results}
 
 \begin{table}[h]
 \centering
 \small
-\caption{Policy violation rates across four frontier models on PhantomPolicy
-(12 violation cases, 8 safe controls). ``Self-avoided'' indicates cases where
-the model declined the action without world-state knowledge. Sentinel results
-are reported separately in text (\S\ref{sec:experiments}): under the
-co-designed world model (Coverage$(W,\mathcal{V})=1.0$), Sentinel correctly
-caught all violations performed by each model with zero false positives on safe
-controls, establishing a feasibility proof rather than a general performance
-claim.}
+\caption{Baseline model behavior on PhantomPol-100 (60 violation-ground-truth cases, 40 safe controls). \textbf{Violated} counts cases where the model performed the ground-truth violating action. \textbf{Self-avoided} counts violation-ground-truth cases where the model declined, hedged, or produced no violating tool trace. \textbf{Safe ctrl.\ violated} counts safe-control cases where the model incorrectly performed a violating action. Sentinel metrics (Table~\ref{tab:sentinel100}) are computed only on traces where the model actually violated.}
 \label{tab:results}
 \begin{tabular}{lccc}
 \toprule
 \textbf{Model} & \textbf{Violated} & \textbf{Self-avoided} & \textbf{Safe ctrl.} \\
 \midrule
-GPT-4o            & 10/12 (83\%)  & 2 & 0/8 \\
-Claude Sonnet 4.6 & 10/12 (83\%)  & 2 & 0/8 \\
-Claude Opus 4.6   & 9/12  (75\%)  & 3 & 0/8 \\
-GPT-5.4           & 12/12 (100\%) & 0 & 0/8 \\
+GPT-4o            & 9/60 (15\%)  & 51 & 0/40 \\
+Claude Sonnet 4.6 & 10/60 (17\%) & 50 & 0/40 \\
+Claude Opus 4.6   & 10/60 (17\%) & 50 & 0/40 \\
+GPT-5.4           & 12/60 (20\%) & 48 & 0/40 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\centering
+\small
+\caption{Sentinel replay evaluation on PhantomPol-100, restricted to cases where the baseline model performed a violation (excluding self-avoided traces). Precision is the fraction of \textsc{Block}/\textsc{Clarify} decisions that correspond to true violations; recall is the fraction of performed violations caught. Both \textsc{Block} and \textsc{Clarify} count as catching a violation.}
+\label{tab:sentinel100}
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Model} & \textbf{TP} & \textbf{TN} & \textbf{FP} & \textbf{FN} & \textbf{Prec.} & \textbf{Rec.} \\
+\midrule
+GPT-4o            & 9 & 39 & 1 & 0 & 0.90 & 1.00 \\
+GPT-5.4           & 12 & 39 & 1 & 0 & 0.92 & 1.00 \\
+Claude Sonnet 4.6 & 10 & 38 & 2 & 0 & 0.83 & 1.00 \\
+Claude Opus 4.6   & 10 & 38 & 2 & 0 & 0.83 & 1.00 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \paragraph{Key findings.}
 
-\textbf{(F1) All models exhibit widespread violations.} Violation rates range from 75\% to 100\%, with no model achieving reliable policy enforcement. Safe controls are never violated (0 false alarms from models), confirming that the models are capable and cooperative — the violations arise from a knowledge gap, not misalignment.
+\textbf{(F1) Executed violations remain substantial; self-avoidance dominates risky cases.} On the 60 violation-ground-truth cases, most runs end in self-avoidance (48--51/60) rather than a clean executing violation. Among cases where the model does comply and execute, violation rates are 15--20\% (Table~\ref{tab:results}). Safe controls are never violated by the baseline models (0/40), confirming cooperative behavior — failures on risky cases arise from missing policy state, not from models ignoring the user.
 
-\textbf{(F2) Violation rates do not track model capability.} Violation rates range from 9/12 to 12/12 across the four models. With only 12 cases per model, differences such as 9/12 vs.\ 10/12 are not statistically meaningful, and we caution against reading rankings into these numbers. The more notable observation is that Claude Opus 4.6 — a more capable model by most benchmarks — does not achieve a substantially lower violation rate than smaller models, and GPT-5.4 achieves the highest rate despite being the strongest instruction-follower. This is consistent with instruction-following disposition and policy enforcement being orthogonal dimensions: a more compliant model executes user requests more reliably, which in this setting means completing the violating action with less hesitation. The primary finding is the uniformity of failure across all models, not any individual model's ranking.
+\textbf{(F2) Violation rates on executed traces do not track nominal model capability.} GPT-5.4 shows the highest executed-violation rate (12/60) while GPT-4o the lowest (9/60); Claude Sonnet and Opus tie at 10/60. Differences are modest at this scale; we caution against strong rankings. The pattern is consistent with instruction-following and policy awareness being imperfectly aligned: stronger compliance can yield more completed violating actions when policy state is invisible.
 
-A secondary observation concerns GPT-5.4 specifically: it is the only model in our evaluation that self-avoided zero cases. While the violation rate differences across models are not statistically reliable at this sample size, the self-avoidance pattern is more robust — GPT-4o and the Claude models each declined at least two cases on surface-cue grounds, whereas GPT-5.4 completed every task without hesitation. This is consistent with models optimized for decisive instruction-following being less likely to pause on ambiguous linguistic signals, which in ordinary settings is a feature, but in policy-sensitive contexts removes even the incidental protection that hedging behavior occasionally provides.
+\textbf{(F3) Self-avoidance is unreliable as enforcement.} Self-avoidance rates differ by model (48--51/60) and, at 100-case scale, swamp the executed-violation counts. Qualitatively, self-avoidance correlates with linguistic cues in the user prompt rather than systematic world-state reasoning. An organization cannot audit which risky cases a model silently declined versus executed.
 
-\textbf{(F3) Self-avoidance is inconsistent and surface-cue-driven.} The 2--3 cases that each model self-avoids differ across models (Table~\ref{tab:selfavoid}). The common factor in self-avoided cases is the presence of an explicit linguistic cue in the user prompt (e.g., ``internal planning channel'', ``our pricing floor is''). When such cues are present, stronger models sometimes recognize the sensitivity; when absent, all models comply. This inconsistency makes model self-avoidance unreliable as a policy enforcement mechanism.
-
-\begin{table}[h]
-\centering
-\small
-\caption{Cases self-avoided by each model. No case is consistently avoided across all models. $^\dagger$For Claude Opus 4.6 on \texttt{hr\_data\_to\_manager}, Sentinel issued BLOCK on an outbound action while the heuristic labeler classified the baseline as ``safe'' — a likely false negative in outcome labeling (see \S\ref{sec:discussion}).}
-\label{tab:selfavoid}
-\begin{tabular}{lp{9cm}}
-\toprule
-\textbf{Model} & \textbf{Self-avoided cases} \\
-\midrule
-GPT-4o            & \texttt{cross\_context\_leakage}, \texttt{accumulated\_source\_leak} \\
-Claude Sonnet 4.6 & \texttt{cross\_context\_leakage}, \texttt{hr\_data\_to\_manager} \\
-Claude Opus 4.6   & \texttt{pricing\_floor\_to\_customer}, \texttt{accumulated\_source\_leak}, \texttt{hr\_data\_to\_manager}$^\dagger$ \\
-GPT-5.4           & \textit{None} \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\textbf{(F4) Sentinel correctly enforces policy on PhantomPolicy, with no false positives.} On cases where the model actually performed a violation, Sentinel issued \textsc{Block} or \textsc{Clarify} in every instance. On all 8 safe controls, Sentinel issued \textsc{Allow}. The enforcement outcome is consistent across the four evaluated models within this benchmark. As noted in \S\ref{sec:discussion}, PhantomPolicy is a co-designed benchmark; this result establishes feasibility rather than broad generalization.
+\textbf{(F4) Sentinel achieves full recall on performed violations; a few safe-control false positives appear.} On every trace where the model actually violated, Sentinel issued \textsc{Block} or \textsc{Clarify} (recall 1.0; Table~\ref{tab:sentinel100}). On safe controls, Sentinel issued \textsc{Allow} in 38--39/40 cases: one false positive for GPT-4o and GPT-5.4, two for both Claude models — all on safe-control cases, suggesting a small boundary-tuning gap between the co-designed world model and control prompts rather than missed risky violations. PhantomPol-100 remains co-designed with Sentinel; these numbers establish feasibility under Coverage$(W,\mathcal{V})=1.0$, not a general real-world guarantee.
 
 \subsection{Violation Category Analysis}
 
 \begin{table}[h]
 \centering
 \small
-\caption{Model violation rate by violation category. A cell shows the fraction of cases in that category where the model violated (higher = more dangerous). The Sentinel column shows the fraction of \emph{actual model violations} that Sentinel correctly caught (Block or Clarify).}
+\caption{Executed violations by category on PhantomPol-100 (numerator = cases where the baseline model performed a violating action; denominator = violation-ground-truth cases in that category). Empty cells would indicate no cases in the category; all eight categories are represented.}
 \label{tab:category}
-\begin{tabular}{lcccc|c}
+\begin{tabular}{lcccc}
 \toprule
-\textbf{Category} & \textbf{GPT-4o} & \textbf{Son.} & \textbf{Opus} & \textbf{GPT-5.4} & \textbf{Sentinel} \\
+\textbf{Category} & \textbf{GPT-4o} & \textbf{Son.} & \textbf{Opus} & \textbf{GPT-5.4} \\
 \midrule
-Context boundary               & 1/2 & 1/2 & 2/2 & 2/2 & 6/6 \\
-Text-output leakage            & 2/2 & 2/2 & 1/2 & 2/2 & 7/7 \\
-Oversharing                    & 2/2 & 2/2 & 2/2 & 2/2 & 8/8 \\
-Audience restriction           & 2/2 & 1/2 & 1/2 & 2/2 & 6/6 \\
-Accumulated session leakage    & 0/1 & 1/1 & 0/1 & 1/1 & 2/2 \\
-Cross-context dataflow         & 1/1 & 1/1 & 1/1 & 1/1 & 4/4 \\
-High-value resource protection & 2/2 & 2/2 & 2/2 & 2/2 & 8/8 \\
+Accumulated session leakage    & 0/7 & 1/7 & 1/7 & 1/7 \\
+Audience restriction           & 2/8 & 1/8 & 1/8 & 2/8 \\
+Context boundary               & 1/8 & 1/8 & 2/8 & 2/8 \\
+Cross-context dataflow         & 1/6 & 1/6 & 1/6 & 1/6 \\
+High-value resource protection & 1/8 & 1/8 & 1/8 & 1/8 \\
+Oversharing                    & 2/8 & 2/8 & 2/8 & 2/8 \\
+Temporal validity              & 0/7 & 1/7 & 1/7 & 1/7 \\
+Text-output leakage            & 2/8 & 2/8 & 1/8 & 2/8 \\
 \midrule
-\textbf{Total}                 & 10/12 & 10/12 & 9/12 & 12/12 & \textbf{41/41} \\
+\textbf{Total (60)}            & 9/60 & 10/60 & 10/60 & 12/60 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Notably, oversharing, cross-context dataflow, and high-value resource protection categories show 100\% violation rates across all models — these violation categories have no surface-level signals that model reasoning alone could reliably act on without access to world-state. Text-output leakage is detected by Opus in one case (where the user explicitly states a pricing floor), but not consistently.
+Oversharing and cross-context dataflow show uniformly high executed-violation counts among models that complete the task (2/8 and 1/6 respectively where all four match on the latter). Temporal validity and accumulated session leakage show the most variance, including cases where the model self-avoids rather than executes — consistent with categories that lack reliable surface cues or require multi-turn reasoning. On every performed violation in our logs, Sentinel achieved recall 1.0 (Table~\ref{tab:sentinel100}).
 
 %% ============================================================
 \section{Analysis and Discussion}
 \label{sec:discussion}
 %% ============================================================
 
-The Sentinel results in \S\ref{sec:experiments} establish feasibility: given a co-designed world model with Coverage$(W,\mathcal{V})=1.0$, world-state-grounded enforcement correctly catches every violation the models produce. The remainder of this section analyzes \emph{why} model-only approaches cannot substitute for this, and what the results do and do not generalize to.
+The Sentinel results in \S\ref{sec:experiments} establish feasibility: given a co-designed world model with Coverage$(W,\mathcal{V})=1.0$, world-state-grounded enforcement achieves recall 1.0 on every baseline-performed violation on PhantomPol-100, with 1--2 false positives on the 40 safe controls (Table~\ref{tab:sentinel100}). The remainder of this section analyzes \emph{why} model-only approaches cannot substitute for this, and what the results do and do not generalize to.
 
 \subsection{Why Reasoning Without Policy-State Access Is Insufficient}
 
 Policy-invisible violations are defined by the \emph{absence} of policy metadata from the execution context. Our benchmark isolates settings where policy-relevant state is not surfaced into the model's decision pathway; in these settings, model-only judgment is unreliable. The question is therefore not whether models can reason their way to the correct policy decision, but whether they happen to exhibit conservative behavior that incidentally avoids the violation.
 
-The self-avoidance observed in some models arises from linguistic patterns in the user's message that correlate with sensitivity. \texttt{cross\_context\_leakage} — self-avoided by both GPT-4o and Claude Sonnet 4.6 — contains the explicit phrase ``internal planning channel'', a surface cue both models recognized. \texttt{pricing\_floor\_to\_customer} — self-avoided only by Opus — has the user directly stating ``our pricing floor is \$42/unit''; Opus inferred sensitivity from this framing while other models did not. \texttt{accumulated\_source\_leak} — self-avoided by GPT-4o and Opus but violated by Sonnet and GPT-5.4 — is a multi-turn case where the confidentiality of the combined output is subtle. No case is consistently self-avoided by all models, confirming that self-avoidance is opportunistic rather than principled.
+On the initial 12-case pilot embedded in PhantomPol-100's design lineage, self-avoidance was sparse enough to compare case-by-case: e.g.\ \texttt{cross\_context\_leakage} (``internal planning channel'') was self-avoided by GPT-4o and Claude Sonnet but not by others; \texttt{pricing\_floor\_to\_customer} was self-avoided only by Opus. At 100-case scale, self-avoidance is widespread (48--51/60 violation-ground-truth cases) and no longer sparse enough to treat as a handful of idiosyncratic refusals — yet it remains opportunistic rather than principled, because it does not track hidden world-state attributes the model cannot see.
 
-GPT-5.4's 100\% violation rate is the most striking result. One plausible interpretation is that GPT-5.4's stronger instruction-following reduces the incidental hesitation that sometimes protects more cautious models — it is less likely to pause on surface-level cues that other models treat as implicit warnings. Notably, Claude Opus 4.6 — a more capable model than Sonnet by standard benchmarks — has a \emph{lower} violation rate (75\% vs. 83\%), suggesting that raw capability is not the driving variable; instruction-following disposition is.
+Among cases where models execute rather than self-avoid, GPT-5.4 ties for the highest executed-violation count (12/60) while GPT-4o is lowest (9/60); Claude Sonnet and Opus tie at 10/60. One interpretation is that stronger instruction-following can increase completed violating actions when policy metadata is absent, but the effect is modest and confounded by self-avoidance variance across vendors.
 
 This distinction matters for system design. An organization cannot rely on model conservatism as a policy enforcement mechanism, because:
 \begin{enumerate}[noitemsep]
   \item Self-avoidance is inconsistent across models and cases
   \item Model updates may increase or decrease violation rates unpredictably
   \item There is no way to audit which violations a model self-avoided
-  \item Our results suggest that stronger instruction compliance can increase violation risk when policy-relevant state is absent
+  \item Our results suggest that stronger instruction compliance can correlate with more completed violations when policy-relevant state is absent, though self-avoidance dominates at scale
 \end{enumerate}
 
 \subsection{Error Analysis}
 
 Two violation categories present the most enforcement difficulty, and are most likely to require enhancements beyond the current Sentinel design:
 
-\textbf{Accumulated session leakage.} These cases require tracking the provenance of every data source accessed in the session and computing the effective scope of the union — not just the scope of the most recent document. The challenge grows with session length: a long agent session that reads dozens of documents may accumulate a complex taint state. Current Sentinel handles this with a flat list of accumulated data sources; a session provenance graph would be needed for more complex multi-document scenarios. Notably, this category shows the most inconsistent model behavior (self-avoided by 2 of 4 models), suggesting that surface-cue complexity is also high.
+\textbf{Accumulated session leakage.} These cases require tracking the provenance of every data source accessed in the session and computing the effective scope of the union — not just the scope of the most recent document. The challenge grows with session length: a long agent session that reads dozens of documents may accumulate a complex taint state. Current Sentinel handles this with a flat list of accumulated data sources; a session provenance graph would be needed for more complex multi-document scenarios. Notably, this category shows heterogeneous executed-violation counts across models on PhantomPol-100 (Table~\ref{tab:category}), suggesting that surface-cue complexity and multi-turn subtlety interact with vendor-specific refusal behavior.
 
 \textbf{Text-output leakage.} Cases where the user provides confidential data verbally — without reading a file — require content-level analysis of the message itself, not just world-state lookup. The ContentLeakageVerifier's regex fingerprinting is a fragile solution: it depends on the specific dollar amounts and percentages appearing verbatim in the email body. A production system would need embedding-based similarity matching between the outbound content and known sensitive data. This category also surfaces the limitation of our heuristic outcome labeler, as noted in \S\ref{sec:discussion}.
 
@@ -471,10 +498,10 @@ PhantomPolicy and Sentinel are co-designed artifacts: the benchmark
 violation categories were defined in part to match verifiable policy
 rules, and Sentinel's verifiers were built to handle exactly these
 categories. It is therefore important to be precise about \emph{why}
-Sentinel achieves 100\% recall on PhantomPolicy: not because its
+Sentinel achieves 100\% recall on performed violations in our evaluation: not because its
 enforcement logic is sophisticated, but because the world model $W$
 was constructed to contain exactly the entities and policy attributes
-needed to detect every case in the benchmark. Sentinel's performance
+needed to detect every case in the benchmark. The small number of safe-control false positives (Table~\ref{tab:sentinel100}) indicates residual boundary mismatches between control prompts and verifier predicates, not failure to flag risky violations. Sentinel's performance
 is best understood as a co-designed feasibility result under complete world-model coverage.
 
 We formalize this dependency. For a violation case $v$, let $E(v)$
@@ -489,9 +516,9 @@ active status). Define \emph{world-model coverage} as:
 
 Sentinel's recall is bounded above by $\mathrm{Coverage}(W,\mathcal{V})$:
 a violation whose relevant entities are absent from $W$ is structurally
-undetectable regardless of verifier quality. In PhantomPolicy,
+undetectable regardless of verifier quality. In our benchmark releases,
 $\mathrm{Coverage}(W,\mathcal{V}) = 1.0$ by construction; this is what
-makes the 100\% recall possible, not achievable in general.
+makes full recall on performed violations possible, not achievable in general.
 
 The implication for real deployments is that world-model coverage acts
 as a hard constraint on enforcement quality: even a strong verifier
@@ -545,14 +572,14 @@ Second, and more fundamentally, confirmation requests do not resolve the underly
 
 \paragraph{Content DLP enforcement.} As analyzed in \S\ref{sec:related}, content-only approaches achieve at most 25\% recall (3/12) on PhantomPolicy. Improving classifier quality would not change this ceiling: the remaining 9 violations are structurally undetectable by content inspection because the sensitive information never appears in the outbound payload. Sentinel's contribution is providing the architectural complement that content inspection cannot: entity relationships, session provenance, and audience restrictions derived from the organizational world model.
 
-\paragraph{Policy-in-prompt enforcement.} A third alternative is to include policy rules directly in the agent's system prompt — instructing the model to check compliance before executing any outbound action. We evaluate this approach experimentally because it is the most practical alternative organizations might consider.
+\paragraph{Policy-in-prompt enforcement.} A third alternative is to include policy rules directly in the agent's system prompt — instructing the model to check compliance before executing any outbound action. We evaluate this approach experimentally because it is the most practical alternative organizations might consider. \textbf{This ablation uses the initial 20-case PhantomPolicy pilot} (12 violation, 8 safe controls); we leave a scaled policy-in-prompt run on PhantomPol-100 to future work.
 
-\emph{Experimental setup.} We inject six general policy rules into the system prompt — covering scope boundaries, audience restrictions, context boundaries, session accumulation, high-value resource protection, and recipient verification — while providing \emph{no entity-level metadata} (no file audiences, no contact scopes, no thread importance levels). The model receives the rules but must infer applicability from visible context alone. We evaluate all four models on the full PhantomPolicy benchmark under this condition.
+\emph{Experimental setup.} We inject six general policy rules into the system prompt — covering scope boundaries, audience restrictions, context boundaries, session accumulation, high-value resource protection, and recipient verification — while providing \emph{no entity-level metadata} (no file audiences, no contact scopes, no thread importance levels). The model receives the rules but must infer applicability from visible context alone. We evaluate all four models on that pilot under this condition.
 
 \begin{table}[h]
 \centering
 \small
-\caption{Policy-in-prompt experimental results on PhantomPolicy. ``Violated'' counts cases where the model performed the violating action despite having policy rules. ``Self-avoided'' counts cases where the model declined. ``Over-blocked'' counts safe control cases where the model incorrectly refused a legitimate operation. Policy-in-prompt reduces violations but introduces substantial false positives on safe operations.}
+\caption{Policy-in-prompt experimental results on the \textbf{initial 20-case} PhantomPolicy pilot. ``Violated'' counts cases where the model performed the violating action despite having policy rules. ``Self-avoided'' counts cases where the model declined. ``Over-blocked'' counts safe control cases where the model incorrectly refused a legitimate operation. Policy-in-prompt reduces violations but introduces substantial false positives on safe operations.}
 \label{tab:pip}
 \begin{tabular}{lccccc}
 \toprule
@@ -581,7 +608,7 @@ Second, and more fundamentally, confirmation requests do not resolve the underly
 
 \textbf{(2) False positives are severe across all models.} GPT-4o over-blocks 4/8 safe controls (50\%); GPT-5.4 and Claude Opus 4.6 over-block 3/8 (38\%); Claude Sonnet 4.6 over-blocks 5/8 (63\%). The primary failure mode is consistent: models refuse to send PARTNER\_OK documents to authorized external recipients, stating reasons like ``the document contains internal information'' or ``I need to pause before proceeding'' — because they cannot distinguish PARTNER\_OK from INTERNAL\_ONLY without entity-level metadata. Claude Sonnet 4.6 even refuses to send internal-channel pricing data to an \emph{internal} colleague (Sarah Wong, \texttt{@mycompany.com}), demonstrating that the model's caution is indiscriminate rather than principled.
 
-\textbf{(3) The instruction-following paradox reappears.} The same disposition that drives baseline behavior drives policy-in-prompt behavior — with an important caveat: \textbf{GPT-5.4 and Claude Opus 4.6 record \emph{identical} policy-in-prompt outcomes on PhantomPolicy} (1/12 violations, 3/8 safe-control false positives; per-case labels match in our saved result logs). Thus they are not two points on a precision--recall frontier but a \emph{tie}. What differs is the \emph{baseline} (no policy): GPT-5.4 violates 12/12, Opus 9/12; once the same policy paragraph is injected, both converge to the same self-avoidance and over-blocking pattern. Claude Sonnet 4.6, the most cautious model at baseline, achieves 100\% self-avoidance under policy-in-prompt but the highest false positive rate (63\%). False positives for GPT-5.4 and Opus still target structurally legitimate operations that Sentinel correctly allows. Instruction compliance amplifies whatever instructions are given, whether they are user requests or policy constraints — but without entity-level knowledge, no model can distinguish warranted caution from over-blocking.
+\textbf{(3) The instruction-following paradox reappears.} The same disposition that drives baseline behavior drives policy-in-prompt behavior — with an important caveat: \textbf{GPT-5.4 and Claude Opus 4.6 record \emph{identical} policy-in-prompt outcomes on the pilot} (1/12 violations, 3/8 safe-control false positives; per-case labels match in our saved result logs). Thus they are not two points on a precision--recall frontier but a \emph{tie}. What differs is the \emph{baseline} at pilot scale: GPT-5.4 violates 12/12, Opus 9/12; once the same policy paragraph is injected, both converge to the same self-avoidance and over-blocking pattern. On \textbf{PhantomPol-100}, scaled baselines no longer show 12/12 vs.\ 9/12 (Table~\ref{tab:results}), so the pilot should be read as a qualitative stress test rather than a direct projection to 100-case behavior. Claude Sonnet 4.6 achieves 100\% self-avoidance under policy-in-prompt on the pilot but the highest false positive rate (63\%). False positives for GPT-5.4 and Opus still target structurally legitimate operations that Sentinel correctly allows on the co-designed benchmark. Instruction compliance amplifies whatever instructions are given, whether they are user requests or policy constraints — but without entity-level knowledge, no model can distinguish warranted caution from over-blocking.
 
 \textbf{(4) Entity-blocked violations persist.} The \texttt{oversharing\_onboarding} case — where the model shares an entire directory including an HR\_ONLY file — persists for GPT-5.4 and Claude Opus 4.6 because the policy rule ``do not share HR\_ONLY documents'' requires knowing \emph{which} file is HR\_ONLY. The model sees three files with innocuous titles and no metadata distinguishing them. Claude Sonnet 4.6 avoided even this case by reading the file contents and recognizing leveling and compensation guidance, but this content-inference strategy is fragile and only works when sensitive data is recognizable from its surface form. This is the class of violation that only world-state-grounded enforcement can reliably address.
 
@@ -590,13 +617,10 @@ Second, and more fundamentally, confirmation requests do not resolve the underly
 \begin{table}[h]
 \centering
 \small
-\caption{Enforcement strategy comparison on PhantomPolicy. Violation recall is
+\caption{Enforcement strategy comparison. Violation recall is
 the fraction of violations prevented; FP rate is the fraction of safe controls
-incorrectly blocked. Strategies are grouped by whether they access organizational
-world-state. The Sentinel row shows the empirical upper bound under complete benchmark world-state coverage: recall equals
-world-model coverage (Coverage$(W,\mathcal{V})$; see \S\ref{sec:discussion}),
-which is 1.0 in this co-designed evaluation. In practice, recall scales with
-the completeness of the deployed world model.}
+incorrectly blocked. Model-only rows summarize the \textbf{20-case pilot} (policy-in-prompt, DLP analysis on 12 violation cases) except Sentinel, which reports \textbf{PhantomPol-100} replay metrics (40 safe controls). Strategies are grouped by whether they access organizational
+world-state. The Sentinel row shows empirical behavior under complete benchmark world-state coverage: recall on performed violations is 1.0 (Table~\ref{tab:sentinel100}); recall against \emph{all} violation-ground-truth cases is bounded by Coverage$(W,\mathcal{V})$ and by how often the model executes vs.\ self-avoids.}
 \label{tab:enforcement_comparison}
 \begin{tabular}{lccc}
 \toprule
@@ -611,11 +635,11 @@ the completeness of the deployed world model.}
 \quad Confirmation-only                     & 67\%  & 50\% & User uninformed; misses internal \\
 \midrule
 \multicolumn{4}{l}{\emph{World-state-grounded}} \\
-\quad Sentinel (upper bound$^\dagger$) & Coverage$(W,\mathcal{V})$ & 0\% & World model completeness \\
+\quad Sentinel (replay)$^\dagger$ & 1.0 (performed viol.) & 2.5--5\%$^\ddagger$ & World model completeness; control tuning \\
 \bottomrule
 \end{tabular}
-\footnotesize{$^\dagger$Recall upper bound: bounded by Coverage$(W,\mathcal{V})$
-(\S\ref{sec:discussion}). Evaluated here under Coverage$=1.0$ (co-designed world model).}
+\footnotesize{$^\dagger$Bounded by Coverage$(W,\mathcal{V})$ (\S\ref{sec:discussion}); evaluated at Coverage$=1.0$.
+$^\ddagger$PhantomPol-100: 1/40 false positives for GPT-4o and GPT-5.4; 2/40 for Claude Sonnet and Opus (Table~\ref{tab:sentinel100}).}
 \end{table}
 
 %% ============================================================
@@ -623,34 +647,28 @@ the completeness of the deployed world model.}
 \label{sec:related}
 %% ============================================================
 
-\paragraph{Data Loss Prevention (DLP).} DLP systems~\cite{dlp_survey} detect policy violations in data flows using content inspection (regular expressions, ML classifiers, fingerprinting). Modern enterprise DLP (e.g., Microsoft Purview, Zscaler) has added contextual signals such as user role and endpoint location. However, DLP operates on content and network metadata — it does not understand agent session state, multi-turn data accumulation, or entity-relationship knowledge (e.g., that a contact is inactive, or that a directory-local file has an HR-only audience policy). The violations in PhantomPolicy that involve accumulated session leakage, context boundaries, and audience restrictions cannot be detected by content inspection alone. Sentinel's world-state reasoning is complementary to DLP; the ContentLeakageVerifier component provides DLP-style text fingerprinting as one of five verifiers.
+\paragraph{Data Loss Prevention (DLP).} DLP systems~\cite{dlp_survey} detect policy violations in data flows using content inspection (regular expressions, ML classifiers, fingerprinting). Modern enterprise DLP (e.g., Microsoft Purview, Zscaler) has added contextual signals such as user role and endpoint location. However, DLP operates on content and network metadata — it does not understand agent session state, multi-turn data accumulation, or entity-relationship knowledge (e.g., that a contact is inactive, or that a directory-local file has an HR-only audience policy). As quantified in \S\ref{sec:simpler}, a content-only approach achieves at most 25\% recall on the initial 12 violation cases; the gap is architectural, not a matter of classifier quality.
 
-To quantify this coverage gap: of PhantomPolicy's 12 violation cases, only 3 — the two \emph{text-output leakage} cases where confidential figures appear verbatim in the outbound email body, plus one context-boundary case carrying quoted pricing data — are in principle detectable by content pattern matching. The remaining 9 violations involve no sensitive strings in the outbound content: they are structural violations that require knowing a file's audience policy (HR\_ONLY), the accumulated taint of a session's data sources, or the relationship between a document and its intended recipients. A DLP-only approach therefore achieves at most 25\% recall (3/12) on this benchmark; the detection gap is architectural, not a matter of classifier quality. Our contribution is not a new policy type or enforcement mechanism, but a new failure mode: contextual violations that are invisible to model-only judgment when policy-relevant world state is not explicitly surfaced into the decision pathway.
+\paragraph{LLM safety, alignment, and adversarial attacks.} Safety-trained models~\cite{rlhf, cai} refuse harmful requests; our work addresses a different problem where the action is not harmful from the model's perspective. Prompt injection research~\cite{promptinjection} addresses adversarial manipulation of agents; policy-invisible violations require no adversary — the user is cooperative and the request is legitimate.
 
-\paragraph{LLM safety and alignment.} Safety-trained models~\cite{rlhf, cai} are designed to refuse harmful or ethically problematic requests. Our work addresses a different problem: the model is not being asked to do anything harmful from its perspective. Fine-tuning approaches that teach models to enforce specific organizational policies are brittle (policies change, organizations differ) and cannot cover the open-ended space of organizational world states.
+\paragraph{Agent safety and tool use.} Agent safety work has primarily addressed risks from executing dangerous actions~\cite{ruan2024identifying}, with R-Judge~\cite{yuan2024rjudge} benchmarking safety risk awareness and AgentHarm~\cite{andriushchenko2024agentharm} measuring harmfulness of adversarially prompted agents. AgentDojo~\cite{debenedetti2024agentdojo} evaluates prompt injection attacks and defenses. Mo et al.~\cite{mo2024trembling} address guarantees for agentic systems but focus on avoiding catastrophic actions. Our focus is orthogonal: policy violations in routine, authorized operations that are dangerous only in specific organizational contexts.
 
-\paragraph{Prompt injection and adversarial attacks.} A growing body of work addresses adversarial manipulation of LLM-based agents~\cite{promptinjection}. Policy-invisible violations require no adversary: the user is cooperative and the request is legitimate. The threat model is fundamentally different.
+\paragraph{Access control and information flow.} Role-based access control~\cite{rbac} enforces authorization — what a principal is permitted to do — but has no mechanism for audience-based restrictions or session context tracking. Information flow control~\cite{sabelfeld2003language} tracks data sensitivity through programs; our accumulated session leakage and context boundary categories are conceptually related (reading a CONFIDENTIAL document ``taints'' the session), but IFC operates at the program analysis level, not at the level of agent tool calls and organizational policy graphs.
 
-\paragraph{LLM-based agents and tool use.} Recent work has explored agents that use tools via ReAct-style loops~\cite{react} or learned tool use~\cite{toolformer}. Comprehensive benchmarking efforts such as AgentBench~\cite{liu2024agentbench} evaluate LLMs across diverse agentic tasks but focus on task completion rather than policy compliance. Agent safety work has primarily addressed risks from executing dangerous actions (code execution, shell access, irreversible operations)~\cite{ruan2024identifying}, with R-Judge~\cite{yuan2024rjudge} benchmarking safety risk awareness and AgentHarm~\cite{andriushchenko2024agentharm} measuring harmfulness of adversarially prompted agents. AgentDojo~\cite{debenedetti2024agentdojo} provides a dynamic environment for evaluating attacks and defenses. Our focus is orthogonal to these efforts: policy violations in routine, authorized operations (send email, share file) that are dangerous only in specific organizational contexts — no adversary is required. Recent work on safe agentic deployment~\cite{mo2024trembling} addresses the need for guarantees in agentic systems but focuses on avoiding catastrophic actions rather than detecting contextual policy violations. Guardrail systems such as NeMo Guardrails~\cite{rebedea2023nemo} and Llama Guard~\cite{inan2023llama} provide input/output filtering based on content categories, but do not incorporate organizational world-state for policy verification.
+\paragraph{Contextual agent security and policy enforcement.} Siu et al.~\cite{siu2026framework} formalize agent security as a contextual problem, defining task alignment, action alignment, source authorization, and data isolation as core properties. Policy-invisible violations fall within their action alignment dimension — specifically, cases where the policy-relevant state resides in organizational infrastructure rather than the agent's observation. PCAS~\cite{palumbo2026pcas} provides a general-purpose policy compiler with dependency graphs and reference monitors for deterministic enforcement; Sentinel is a narrower proof-of-concept focused on world-state-grounded verification rather than general policy compilation. Winston et al.~\cite{winston2026solver} use SMT solvers for runtime verification of tool call compliance; their approach verifies policies over agent-observable state, whereas our benchmark specifically isolates cases where the relevant state is absent from the agent's observation.
 
-\paragraph{Access control and RBAC.} Role-based access control~\cite{rbac} enforces \emph{authorization} — what a principal is permitted to do. Policy-invisible violations involve authorized principals performing authorized actions that nonetheless violate contextual policy. RBAC has no mechanism for audience-based restrictions, session context tracking, or temporal validity checking of external contacts.
-
-\paragraph{Information Flow Control (IFC).} IFC~\cite{sabelfeld2003language} is a program analysis discipline that tracks how sensitive data flows through a system and enforces policies such as non-interference. The Decentralized Label Model~\cite{myers1997decentralized} provides a formal framework for attaching sensitivity labels to data and verifying that high-confidentiality data does not flow to low-confidentiality principals. Our accumulated session leakage and context boundary categories are conceptually related to IFC: reading a CONFIDENTIAL document ``taints'' the session, and subsequent outbound actions must respect that taint. However, IFC operates at the program analysis level (type systems, runtime monitors on code), not at the level of agent tool calls and organizational policy graphs. Extending IFC principles to LLM agent contexts is a natural direction for future work.
-
-\paragraph{Runtime verification and policy engines.} Runtime verification~\cite{leucker2009brief} monitors system executions against formal specifications at runtime. Policy engines such as Open Policy Agent (OPA)~\cite{opa} and AWS Cedar evaluate authorization queries against declarative policies. Sentinel is closest in spirit to a runtime policy engine applied to agent tool calls, with the distinction that it uses a world model with organizational entity relationships rather than purely attribute-based policies. Integrating Sentinel-style world-state verification with established policy engine infrastructure is a promising direction.
-
-\paragraph{Context-aware security.} Work on context-aware access control~\cite{contextaware} has explored incorporating situational context into authorization decisions. Our work applies similar principles to AI agent tool use, with organizational world-state as the context source.
+\paragraph{Privacy and policy benchmarks for agents.} PrivacyLens~\cite{shao2024privacylens} evaluates contextual privacy norm awareness in agent trajectories, confirming that model knowledge does not transfer to execution compliance — a finding our results extend to organizational policy. TOP-R~\cite{qiao2025topr} benchmarks aggregation leakage where agents combine tool outputs to infer sensitive information; this corresponds to our accumulated session leakage category, one of eight in PhantomPol-100. AgentLeak~\cite{elyagoubi2026agentleak} demonstrates that output-only auditing misses privacy violations in multi-agent internal channels, supporting our argument for tool-call-level interception. AgentDAM~\cite{agentdam2025} evaluates data minimization for autonomous web agents; our work addresses a complementary dimension — policy legality rather than data necessity. Keep Security!~\cite{chang2025keepsecurity} and Doc-PP~\cite{jang2026docpp} test policy preservation when policies are explicitly provided in context (visible-policy preservation). Our setting is complementary: we assume policy-relevant state is \emph{not} in the model's context, making the violation invisible to model reasoning.
 
 %% ============================================================
 \section{Conclusion}
 \label{sec:conclusion}
 %% ============================================================
 
-We have introduced policy-invisible violations as a distinct class of AI agent failures — actions that are user-sanctioned and model-appropriate but violate organizational policy because the relevant world state is absent from the model's execution context. We formalized a taxonomy of seven violation categories, released the PhantomPolicy benchmark of 20 cases with clean tool responses and a companion world model, and empirically demonstrated that four frontier models (GPT-4o, GPT-5.4, Claude Sonnet 4.6, Claude Opus 4.6) exhibit violation rates of 75--100\%.
+We have introduced policy-invisible violations as a distinct class of AI agent failures — actions that are user-sanctioned and model-appropriate but violate organizational policy because the relevant world state is absent from the model's execution context. We formalized a taxonomy of eight violation categories, released the PhantomPol-100 benchmark of 100 cases with clean tool responses and a companion world model, and empirically evaluated four frontier models (GPT-4o, GPT-5.4, Claude Sonnet 4.6, Claude Opus 4.6). On the 60 violation-ground-truth cases, most runs self-avoid; among executed traces, raw violation rates span 15--20\% with no consistent capability ordering.
 
-The uniform failure of all four frontier models — ranging from 75\% to 100\% violation rates — illustrates the core problem: the capability that makes AI agents useful (faithful execution of user intent) is the same capability that makes policy-invisible violations likely. Reasoning capacity and policy compliance are orthogonal dimensions; stronger instruction-following does not confer stronger policy awareness.
+The interplay of executed violations and pervasive self-avoidance illustrates the core problem: the capability that makes AI agents useful (faithful execution of user intent) is the same capability that produces policy-invisible violations when policy state is missing, yet models cannot be relied on to refuse consistently. Reasoning capacity and policy compliance are orthogonal dimensions; stronger instruction-following does not confer stronger policy awareness.
 
-On PhantomPolicy, Sentinel correctly matches ground truth decisions across all four models with no false positives, providing an existence proof that world-state-grounded enforcement can detect this class of violations. As a co-designed proof-of-concept system evaluated on an initial benchmark, these results establish viability rather than general guarantees; evaluating robustness on independently-constructed cases and scaling to larger, multi-domain benchmarks is important future work. We release the benchmark, world model, and reference system to support such evaluation.
+On PhantomPol-100, Sentinel achieves recall 1.0 on every performed violation across all four models under replay, with 1--2 false positives on the 40 safe controls (Table~\ref{tab:sentinel100}), providing an existence proof that world-state-grounded enforcement can detect this class of violations while highlighting residual control-case tuning gaps. As a co-designed proof-of-concept system, these results establish viability rather than general guarantees; evaluating robustness on independently-constructed cases and scaling to larger, multi-domain benchmarks is important future work. We release the benchmark, world model, and reference system to support such evaluation.
 
 As AI agents are deployed in organizational contexts with broader tool
 access, the gap between what agents \emph{can} do and what organizations

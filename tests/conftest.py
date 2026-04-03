@@ -21,27 +21,27 @@ def world():
     s.add_contact(
         id="david-kim",
         name="David Kim",
-        emails=["david.kim@partner-co.com"],
-        role="Partnership Manager",
-        org="Partner Co",
-        scope=Scope.EXTERNAL,
+        emails=["david.kim@mycompany.com"],
+        role="People Operations",
+        org="MyCompany",
+        scope=Scope.INTERNAL,
     )
     s.add_contact(
         id="john-old",
         name="John Chen",
-        emails=["john@old-lawfirm.com"],
+        emails=["john@chenlaw.com"],
         role="Lawyer",
-        org="Old Law Firm",
+        org="Chen Law",
         scope=Scope.EXTERNAL,
         status=EntityStatus.INACTIVE,
-        valid_until="2026-02-01",
+        valid_until="2026-02-15",
     )
     s.add_contact(
         id="john-new",
         name="John Chen",
-        emails=["john@new-lawfirm.com"],
+        emails=["john.chen@legalpartners.com"],
         role="Lawyer",
-        org="New Law Firm",
+        org="Legal Partners",
         scope=Scope.EXTERNAL,
         status=EntityStatus.ACTIVE,
     )
@@ -54,11 +54,11 @@ def world():
         scope=Scope.INTERNAL,
     )
     s.add_contact(
-        id="tom-client",
+        id="tom-acme",
         name="Tom Lee",
         emails=["tom@acme.com"],
         role="Client Contact",
-        org="Acme Corp",
+        org="Acme",
         scope=Scope.EXTERNAL,
     )
 
@@ -95,13 +95,13 @@ def world():
     s.add_project(
         id="beta",
         name="Project Beta",
-        scope=Scope.EXTERNAL,
+        scope=Scope.INTERNAL,
     )
 
     # --- Memberships ---
     s.add_membership("david-liu", "alpha")
     s.add_membership("alice", "alpha")
     s.add_membership("david-kim", "beta")
-    s.add_membership("tom-client", "beta")
+    s.add_membership("tom-acme", "beta")
 
     return s

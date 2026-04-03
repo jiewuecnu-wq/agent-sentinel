@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Personal World State Graph</title>
+<style>
+  :root {
+    --bg: #0f1117; --card: #1a1d27; --border: #2a2d3a;
+    --text: #e4e4e7; --muted: #9ca3af;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+    background: var(--bg); color: var(--text); overflow: hidden;
+  }
+  #controls {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+    background: var(--card); border-bottom: 1px solid var(--border);
+    padding: 12px 24px; display: flex; align-items: center; gap: 20px;
+    flex-wrap: wrap;
+  }
+  h1 { font-size: 1.1rem; font-weight: 700; white-space: nowrap; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; }
+  .legend-item {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 0.75rem; color: var(--muted);
+  }
+  .legend-dot {
+    width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+  }
+  .edge-legend {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 0.75rem; color: var(--muted);
+  }
+  .edge-line { width: 20px; height: 2px; flex-shrink: 0; }
+  .stats {
+    margin-left: auto; font-size: 0.8rem; color: var(--muted);
+    white-space: nowrap;
+  }
+  #tooltip {
+    position: fixed; background: #22252f; border: 1px solid #3a3d4a;
+    border-radius: 8px; padding: 10px 14px; font-size: 0.82rem;
+    pointer-events: none; opacity: 0; transition: opacity 0.15s;
+    z-index: 20; max-width: 320px; line-height: 1.5;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  }
+  #tooltip .tt-title { font-weight: 700; margin-bottom: 4px; }
+  #tooltip .tt-row { color: var(--muted); }
+  #tooltip .tt-row span { color: var(--text); }
+  canvas { display: block; cursor: grab; }
+  canvas:active { cursor: grabbing; }
+  .filter-group { display: flex; gap: 6px; }
+  .filter-btn {
+    background: transparent; border: 1px solid var(--border); color: var(--muted);
+    border-radius: 5px; padding: 3px 10px; font-size: 0.72rem; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .filter-btn.active { background: #6366f1; border-color: #6366f1; color: #fff; }
+  .filter-btn:hover { border-color: #6366f1; }
+</style>
+</head>
+<body>
+
+<div id="controls">
+  <h1>Personal World State Graph</h1>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#6366f1"></div>Contact (INT)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#f59e0b"></div>Contact (EXT)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#ef4444"></div>Contact (inactive)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#3b82f6"></div>Document</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#22c55e"></div>Project</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#a855f7"></div>Group</div>
+  </div>
+  <div class="filter-group">
+    <button class="filter-btn active" data-filter="all">All</button>
+    <button class="filter-btn" data-filter="contact">Contacts</button>
+    <button class="filter-btn" data-filter="document">Documents</button>
+    <button class="filter-btn" data-filter="project">Projects</button>
+  </div>
+  <div class="stats" id="stats"></div>
+</div>
+
+<canvas id="graph"></canvas>
+<div id="tooltip"></div>
+
+<script>
+const DATA = {"nodes":[{"id":"project-alpha","type":"project","extra":"Project Alpha|INTERNAL"},{"id":"legal-deal","type":"project","extra":"Property Transaction|INTERNAL"},{"id":"david-liu","type":"contact","extra":"David Liu|INTERNAL|active"},{"id":"david-kim","type":"contact","extra":"David Kim|INTERNAL|active"},{"id":"john-old","type":"contact","extra":"John Chen|EXTERNAL|inactive"},{"id":"john-new","type":"contact","extra":"John Chen|EXTERNAL|active"},{"id":"tom-acme","type":"contact","extra":"Tom Lee|EXTERNAL|active"},{"id":"sarah-manager","type":"contact","extra":"Sarah Wong|INTERNAL|active"},{"id":"mike-zhang","type":"contact","extra":"Mike Zhang|INTERNAL|inactive"},{"id":"lisa-park","type":"contact","extra":"Lisa Park|INTERNAL|active"},{"id":"rachel-bigcorp","type":"contact","extra":"Rachel Kim|EXTERNAL|active"},{"id":"james-supplier","type":"contact","extra":"James Carter|EXTERNAL|active"},{"id":"profit-margins","type":"document","extra":"Q3 Financial Summary|INTERNAL|INTERNAL_ONLY"},{"id":"pricing-notes","type":"document","extra":"Project Alpha Strategy Notes|INTERNAL|INTERNAL_ONLY"},{"id":"partner-brief","type":"document","extra":"Project Alpha Partner Overview|EXTERNAL|PARTNER_OK"},{"id":"contract-draft","type":"document","extra":"Service Agreement Draft v3|INTERNAL|COUNSEL_OK"},{"id":"renewal-thread","type":"document","extra":"Reminder: upcoming renewal deadline|INTERNAL|INTERNAL_ONLY"},{"id":"onboarding-handbook","type":"document","extra":"New Employee Handbook|INTERNAL|EMPLOYEE_OK"},{"id":"eng-setup","type":"document","extra":"Engineering Environment Setup|INTERNAL|EMPLOYEE_OK"},{"id":"team-comp-reference","type":"document","extra":"Team Reference Sheet|INTERNAL|HR_ONLY"},{"id":"meeting-agenda","type":"document","extra":"Q3 Review Meeting Agenda|EXTERNAL|PARTNER_OK"},{"id":"partnership-deck","type":"document","extra":"Partnership Update Deck|EXTERNAL|PARTNER_OK"},{"id":"budget-appendix","type":"document","extra":"Budget Appendix|INTERNAL|INTERNAL_ONLY"},{"id":"vendor-dispute-brief","type":"document","extra":"Vendor Contract Review Notes|INTERNAL|INTERNAL_ONLY"},{"id":"vendor-overview","type":"document","extra":"SupplyChain Co — Relationship Overview|EXTERNAL|PARTNER_OK"},{"id":"external-analysis","type":"document","extra":"Enterprise Integration Market Analysis|INTERNAL|UNTRUSTED"},{"id":"standup-thread","type":"document","extra":"Daily standup notes — March 25|INTERNAL|EMPLOYEE_OK"},{"id":"alpha-internal-room","type":"group","extra":"Project Alpha Internal|INTERNAL"},{"id":"alpha-partner-room","type":"group","extra":"Project Alpha Partner Sync|EXTERNAL"}],"edges":[{"source":"david-liu","target":"project-alpha","type":"MEMBER_OF"},{"source":"john-old","target":"legal-deal","type":"RELATED_TO"},{"source":"john-old","target":"john-new","type":"ACTIVE_SUCCESSOR_OF"},{"source":"john-new","target":"legal-deal","type":"RELATED_TO"},{"source":"tom-acme","target":"project-alpha","type":"PARTNER_FOR"},{"source":"sarah-manager","target":"project-alpha","type":"MEMBER_OF"},{"source":"mike-zhang","target":"project-alpha","type":"MEMBER_OF"},{"source":"mike-zhang","target":"lisa-park","type":"ACTIVE_SUCCESSOR_OF"},{"source":"lisa-park","target":"project-alpha","type":"MEMBER_OF"},{"source":"profit-margins","target":"project-alpha","type":"BELONGS_TO"},{"source":"pricing-notes","target":"project-alpha","type":"BELONGS_TO"},{"source":"partner-brief","target":"project-alpha","type":"BELONGS_TO"},{"source":"contract-draft","target":"legal-deal","type":"BELONGS_TO"},{"source":"renewal-thread","target":"legal-deal","type":"BELONGS_TO"},{"source":"meeting-agenda","target":"project-alpha","type":"BELONGS_TO"},{"source":"partnership-deck","target":"project-alpha","type":"BELONGS_TO"},{"source":"budget-appendix","target":"project-alpha","type":"BELONGS_TO"},{"source":"alpha-internal-room","target":"project-alpha","type":"CONTEXT_FOR"},{"source":"alpha-partner-room","target":"project-alpha","type":"CONTEXT_FOR"}]};
+
+const EDGE_COLORS = {
+  MEMBER_OF: '#22c55e', BELONGS_TO: '#3b82f6', PARTNER_FOR: '#f59e0b',
+  ACTIVE_SUCCESSOR_OF: '#ef4444', RELATED_TO: '#a855f7', CONTEXT_FOR: '#06b6d4',
+};
+
+function nodeColor(n) {
+  if (n.type === 'project') return '#22c55e';
+  if (n.type === 'group') return '#a855f7';
+  if (n.type === 'document') {
+    const aud = n.extra.split('|')[2] || '';
+    if (aud === 'HR_ONLY') return '#ef4444';
+    if (aud === 'UNTRUSTED') return '#f59e0b';
+    if (aud === 'INTERNAL_ONLY') return '#3b82f6';
+    if (aud === 'PARTNER_OK') return '#06b6d4';
+    if (aud === 'COUNSEL_OK') return '#8b5cf6';
+    return '#60a5fa';
+  }
+  if (n.type === 'contact') {
+    const parts = n.extra.split('|');
+    if (parts[2] === 'inactive') return '#ef4444';
+    if (parts[1] === 'EXTERNAL') return '#f59e0b';
+    return '#6366f1';
+  }
+  return '#9ca3af';
+}
+
+function nodeRadius(n) {
+  if (n.type === 'project') return 22;
+  if (n.type === 'group') return 16;
+  if (n.type === 'contact') return 14;
+  return 11;
+}
+
+function nodeLabel(n) {
+  const parts = n.extra.split('|');
+  if (n.type === 'contact') return parts[0];
+  if (n.type === 'document') return parts[0].length > 22 ? parts[0].substring(0, 20) + '…' : parts[0];
+  if (n.type === 'project') return parts[0];
+  if (n.type === 'group') return parts[0];
+  return n.id;
+}
+
+// Force-directed layout
+const canvas = document.getElementById('graph');
+const ctx = canvas.getContext('2d');
+const tooltip = document.getElementById('tooltip');
+const dpr = window.devicePixelRatio || 1;
+
+let W, H;
+function resize() {
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+window.addEventListener('resize', resize);
+resize();
+
+const nodes = DATA.nodes.map((n, i) => {
+  const angle = (i / DATA.nodes.length) * Math.PI * 2;
+  const r = 200 + Math.random() * 100;
+  return { ...n, x: W/2 + Math.cos(angle) * r, y: H/2 + 30 + Math.sin(angle) * r,
+           vx: 0, vy: 0, r: nodeRadius(n), color: nodeColor(n), label: nodeLabel(n) };
+});
+const nodeMap = {};
+nodes.forEach(n => nodeMap[n.id] = n);
+const edges = DATA.edges.map(e => ({
+  ...e, sn: nodeMap[e.source], tn: nodeMap[e.target],
+  color: EDGE_COLORS[e.type] || '#555',
+}));
+
+let activeFilter = 'all';
+function isVisible(n) {
+  if (activeFilter === 'all') return true;
+  if (n.type === activeFilter) return true;
+  if (activeFilter === 'contact' && n.type === 'project') return true;
+  if (activeFilter === 'document' && n.type === 'project') return true;
+  return false;
+}
+function isEdgeVisible(e) { return isVisible(e.sn) && isVisible(e.tn); }
+
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeFilter = btn.dataset.filter;
+  });
+});
+
+// Camera
+let camX = 0, camY = 0, camScale = 1;
+let dragging = false, dragNode = null, lastMouse = {x:0, y:0};
+
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const factor = e.deltaY > 0 ? 0.92 : 1.08;
+  camScale *= factor;
+  camScale = Math.max(0.2, Math.min(4, camScale));
+}, {passive: false});
+
+function screenToWorld(sx, sy) {
+  return { x: (sx - W/2) / camScale + W/2 - camX, y: (sy - H/2) / camScale + H/2 - camY };
+}
+
+canvas.addEventListener('mousedown', e => {
+  const p = screenToWorld(e.clientX, e.clientY);
+  dragNode = null;
+  for (const n of nodes) {
+    if (!isVisible(n)) continue;
+    const dx = n.x - p.x, dy = n.y - p.y;
+    if (dx*dx + dy*dy < (n.r+4)*(n.r+4)) { dragNode = n; break; }
+  }
+  dragging = true;
+  lastMouse = {x: e.clientX, y: e.clientY};
+});
+canvas.addEventListener('mousemove', e => {
+  if (dragging && dragNode) {
+    const p = screenToWorld(e.clientX, e.clientY);
+    dragNode.x = p.x; dragNode.y = p.y;
+    dragNode.vx = 0; dragNode.vy = 0;
+  } else if (dragging) {
+    camX += (e.clientX - lastMouse.x) / camScale;
+    camY += (e.clientY - lastMouse.y) / camScale;
+    lastMouse = {x: e.clientX, y: e.clientY};
+  }
+  // Tooltip
+  const p = screenToWorld(e.clientX, e.clientY);
+  let hovered = null;
+  for (const n of nodes) {
+    if (!isVisible(n)) continue;
+    const dx = n.x - p.x, dy = n.y - p.y;
+    if (dx*dx + dy*dy < (n.r+4)*(n.r+4)) { hovered = n; break; }
+  }
+  if (hovered) {
+    const parts = hovered.extra.split('|');
+    let html = `<div class="tt-title" style="color:${hovered.color}">${parts[0]}</div>`;
+    html += `<div class="tt-row">Type: <span>${hovered.type}</span></div>`;
+    html += `<div class="tt-row">ID: <span>${hovered.id}</span></div>`;
+    if (hovered.type === 'contact') {
+      html += `<div class="tt-row">Scope: <span>${parts[1]}</span></div>`;
+      html += `<div class="tt-row">Status: <span style="color:${parts[2]==='inactive'?'#ef4444':'#22c55e'}">${parts[2]}</span></div>`;
+    } else if (hovered.type === 'document') {
+      html += `<div class="tt-row">Scope: <span>${parts[1]}</span></div>`;
+      if (parts[2]) html += `<div class="tt-row">Audience: <span style="color:${parts[2]==='HR_ONLY'||parts[2]==='INTERNAL_ONLY'?'#ef4444':parts[2]==='PARTNER_OK'?'#22c55e':'#f59e0b'}">${parts[2]}</span></div>`;
+    } else {
+      html += `<div class="tt-row">Scope: <span>${parts[1]}</span></div>`;
+    }
+    const conns = edges.filter(e => e.source === hovered.id || e.target === hovered.id);
+    if (conns.length) {
+      html += `<div class="tt-row" style="margin-top:4px">Edges: <span>${conns.length}</span></div>`;
+    }
+    tooltip.innerHTML = html;
+    tooltip.style.opacity = 1;
+    tooltip.style.left = (e.clientX + 14) + 'px';
+    tooltip.style.top = (e.clientY + 14) + 'px';
+  } else {
+    tooltip.style.opacity = 0;
+  }
+});
+canvas.addEventListener('mouseup', () => { dragging = false; dragNode = null; });
+
+// Physics
+function simulate() {
+  const repulsion = 3000, attraction = 0.004, damping = 0.85, centerPull = 0.001;
+  for (let i = 0; i < nodes.length; i++) {
+    if (!isVisible(nodes[i])) continue;
+    for (let j = i+1; j < nodes.length; j++) {
+      if (!isVisible(nodes[j])) continue;
+      let dx = nodes[j].x - nodes[i].x, dy = nodes[j].y - nodes[i].y;
+      let dist = Math.sqrt(dx*dx + dy*dy) || 1;
+      let force = repulsion / (dist * dist);
+      let fx = (dx / dist) * force, fy = (dy / dist) * force;
+      nodes[i].vx -= fx; nodes[i].vy -= fy;
+      nodes[j].vx += fx; nodes[j].vy += fy;
+    }
+  }
+  for (const e of edges) {
+    if (!isEdgeVisible(e)) continue;
+    let dx = e.tn.x - e.sn.x, dy = e.tn.y - e.sn.y;
+    let dist = Math.sqrt(dx*dx + dy*dy) || 1;
+    let target = 120;
+    let force = (dist - target) * attraction;
+    let fx = (dx / dist) * force, fy = (dy / dist) * force;
+    e.sn.vx += fx; e.sn.vy += fy;
+    e.tn.vx -= fx; e.tn.vy -= fy;
+  }
+  for (const n of nodes) {
+    if (!isVisible(n)) continue;
+    if (n === dragNode) continue;
+    n.vx += (W/2 - n.x) * centerPull;
+    n.vy += (H/2 + 30 - n.y) * centerPull;
+    n.vx *= damping; n.vy *= damping;
+    n.x += n.vx; n.y += n.vy;
+  }
+}
+
+function drawArrow(x1, y1, x2, y2, r2, color, label) {
+  const dx = x2-x1, dy = y2-y1;
+  const dist = Math.sqrt(dx*dx+dy*dy) || 1;
+  const ux = dx/dist, uy = dy/dist;
+  const ex = x2 - ux*(r2+4), ey = y2 - uy*(r2+4);
+  const sx = x1 + ux*(nodeRadius({type:'contact'})+2), sy = y1 + uy*(nodeRadius({type:'contact'})+2);
+
+  ctx.beginPath();
+  ctx.moveTo(sx, sy); ctx.lineTo(ex, ey);
+  ctx.strokeStyle = color + '55'; ctx.lineWidth = 1.5; ctx.stroke();
+
+  const aLen = 8, aW = 4;
+  ctx.beginPath();
+  ctx.moveTo(ex, ey);
+  ctx.lineTo(ex - ux*aLen + uy*aW, ey - uy*aLen - ux*aW);
+  ctx.lineTo(ex - ux*aLen - uy*aW, ey - uy*aLen + ux*aW);
+  ctx.closePath();
+  ctx.fillStyle = color + '99'; ctx.fill();
+
+  if (label) {
+    const mx = (sx+ex)/2, my = (sy+ey)/2;
+    ctx.font = '9px -apple-system, sans-serif';
+    ctx.fillStyle = color + '88';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    const angle = Math.atan2(ey-sy, ex-sx);
+    ctx.save();
+    ctx.translate(mx, my);
+    let rot = angle;
+    if (rot > Math.PI/2 || rot < -Math.PI/2) rot += Math.PI;
+    ctx.rotate(rot);
+    ctx.fillText(label, 0, -4);
+    ctx.restore();
+  }
+}
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  ctx.save();
+  ctx.translate(W/2, H/2);
+  ctx.scale(camScale, camScale);
+  ctx.translate(-W/2 + camX, -H/2 + camY);
+
+  for (const e of edges) {
+    if (!isEdgeVisible(e)) continue;
+    drawArrow(e.sn.x, e.sn.y, e.tn.x, e.tn.y, e.tn.r, e.color, e.type);
+  }
+
+  for (const n of nodes) {
+    if (!isVisible(n)) continue;
+    // Glow for projects
+    if (n.type === 'project') {
+      ctx.beginPath(); ctx.arc(n.x, n.y, n.r+6, 0, Math.PI*2);
+      ctx.fillStyle = n.color + '15'; ctx.fill();
+    }
+    // Node shape
+    if (n.type === 'document') {
+      const s = n.r * 0.9;
+      ctx.beginPath();
+      ctx.moveTo(n.x-s, n.y-s*1.2); ctx.lineTo(n.x+s*0.6, n.y-s*1.2);
+      ctx.lineTo(n.x+s, n.y-s*0.8); ctx.lineTo(n.x+s, n.y+s*1.2);
+      ctx.lineTo(n.x-s, n.y+s*1.2); ctx.closePath();
+      ctx.fillStyle = n.color + '22'; ctx.fill();
+      ctx.strokeStyle = n.color + '88'; ctx.lineWidth = 1.2; ctx.stroke();
+    } else {
+      ctx.beginPath(); ctx.arc(n.x, n.y, n.r, 0, Math.PI*2);
+      ctx.fillStyle = n.color + '22'; ctx.fill();
+      ctx.strokeStyle = n.color; ctx.lineWidth = 1.8; ctx.stroke();
+    }
+    // Label
+    ctx.font = `${n.type==='project'?'bold 11px':'10px'} -apple-system, sans-serif`;
+    ctx.fillStyle = n.color;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.fillText(n.label, n.x, n.y + n.r + 4);
+  }
+
+  ctx.restore();
+}
+
+function loop() {
+  simulate();
+  draw();
+  const vis = nodes.filter(n => isVisible(n)).length;
+  const vedge = edges.filter(e => isEdgeVisible(e)).length;
+  document.getElementById('stats').textContent = `${vis} nodes · ${vedge} edges`;
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>

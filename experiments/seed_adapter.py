@@ -8,9 +8,9 @@ from sentinel import Sentinel, Scope, SessionContext
 from sentinel.models import Document, EntityStatus, Project, Sensitivity
 
 try:
-    from .seed import CONTACTS, DOCUMENTS, PROJECTS, RELATIONS
+    from .seed import CONTACTS, DOCUMENTS, GROUPS, PROJECTS, RELATIONS
 except ImportError:
-    from seed import CONTACTS, DOCUMENTS, PROJECTS, RELATIONS
+    from seed import CONTACTS, DOCUMENTS, GROUPS, PROJECTS, RELATIONS
 
 
 def _map_scope(name: str) -> Scope:
@@ -80,9 +80,20 @@ def build_sentinel_from_seed() -> Sentinel:
             content=d.get("content"),
         )
 
+    for g in GROUPS:
+        if g.get("type") != "group":
+            continue
+        s.add_group(
+            id=g["id"],
+            name=g["name"],
+            scope=_map_scope(g.get("scope", "INTERNAL")),
+        )
+
     for src, tgt, rel in RELATIONS:
         if rel == "MEMBER_OF":
             s.add_membership(src, tgt)
+        else:
+            s.world.add_relation(src, tgt, rel)
 
     return s
 

@@ -206,7 +206,7 @@ class DataFlowVerifier:
 
         if aud == "COUNSEL_OK":
             role = (contact.role or "").lower()
-            if any(kw in role for kw in ("lawyer", "counsel", "attorney", "legal")):
+            if any(kw in role for kw in ("lawyer", "counsel", "attorney")):
                 return None
 
         if aud in ("PARTNER_OK",):
@@ -230,7 +230,9 @@ class DataFlowVerifier:
 
 
 class DeleteThreadVerifier:
-    """Block or clarify auto-delete of high-value threads."""
+    """Block or clarify auto-delete/forward of high-value threads."""
+
+    _HANDLED_TOOLS = {"delete_email_thread", "forward_email", "forward_message"}
 
     def __init__(self, world: WorldModel) -> None:
         self.world = world
@@ -238,7 +240,7 @@ class DeleteThreadVerifier:
     def verify(
         self, tool_name: str, tool_args: dict
     ) -> Optional[VerificationResult]:
-        if tool_name != "delete_email_thread":
+        if tool_name not in self._HANDLED_TOOLS:
             return None
         thread_id = tool_args.get("thread_id") or tool_args.get("path") or ""
         path = thread_id if str(thread_id).startswith("/") else f"/mail/threads/{thread_id}"
@@ -249,14 +251,15 @@ class DeleteThreadVerifier:
                 explanation="Thread not in policy model; no high-value rule applied.",
             )
         if (doc.thread_importance or "").upper() == "HIGH":
+            action = "deleting" if "delete" in tool_name else "forwarding"
             return VerificationResult(
                 decision=Decision.CLARIFY,
                 explanation=(
                     f"Thread '{doc.title}' is marked high-importance (ongoing legal matter). "
-                    f"Confirm before deleting."
+                    f"Confirm before {action}."
                 ),
             )
-        return VerificationResult(decision=Decision.ALLOW, explanation="Delete allowed.")
+        return VerificationResult(decision=Decision.ALLOW, explanation="Thread operation allowed.")
 
 
 class ContextBoundaryVerifier:
@@ -316,7 +319,7 @@ class ContentLeakageVerifier:
     def _get_fingerprints(self) -> list[tuple[str, str]]:
         if self._fingerprints is None:
             self._fingerprints = []
-            for doc in self.world._documents.values():
+            for doc in self.world.all_documents():
                 if doc.sensitivity < Sensitivity.CONFIDENTIAL:
                     continue
                 content = doc.content or ""

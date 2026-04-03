@@ -128,6 +128,11 @@ class Sentinel:
         if content_result:
             all_results.append(content_result)
 
+        # High-value thread protection for forward operations
+        hv_result = self.delete_verifier.verify(tool_name, tool_args)
+        if hv_result and hv_result.decision != Decision.ALLOW:
+            all_results.append(hv_result)
+
         # Return the most severe result
         blocks = [r for r in all_results if r.decision == Decision.BLOCK]
         if blocks:

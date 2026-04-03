@@ -12,7 +12,7 @@ class TestAmbiguousRecipient:
     """
     Two contacts share the first name "David".
     David Liu is an internal engineer on Project Alpha.
-    David Kim is an external partner on Project Beta.
+    David Kim is an internal contact in People Operations on Project Beta.
 
     When the agent sends to David Kim while discussing Project Alpha,
     Sentinel should flag the mismatch and suggest David Liu.
@@ -22,7 +22,7 @@ class TestAmbiguousRecipient:
         ctx = SessionContext(current_project="alpha")
         result = world.verify(
             "send_email",
-            {"to": "david.kim@partner-co.com", "subject": "Standup", "body": "..."},
+            {"to": "david.kim@mycompany.com", "subject": "Standup", "body": "..."},
             context=ctx,
         )
         assert result.decision == Decision.CLARIFY
@@ -41,7 +41,7 @@ class TestAmbiguousRecipient:
     def test_no_project_context_allows_either(self, world):
         result = world.verify(
             "send_email",
-            {"to": "david.kim@partner-co.com", "subject": "Hello", "body": "..."},
+            {"to": "david.kim@mycompany.com", "subject": "Hello", "body": "..."},
         )
         assert result.decision == Decision.ALLOW
 
@@ -49,7 +49,7 @@ class TestAmbiguousRecipient:
         ctx = SessionContext(current_project="beta")
         result = world.verify(
             "send_email",
-            {"to": "david.kim@partner-co.com", "subject": "Update", "body": "..."},
+            {"to": "david.kim@mycompany.com", "subject": "Update", "body": "..."},
             context=ctx,
         )
         assert result.decision == Decision.ALLOW
@@ -58,8 +58,8 @@ class TestAmbiguousRecipient:
 class TestStaleContact:
     """
     Lawyer John Chen left his old firm in Feb 2026.
-    Old entry (john@old-lawfirm.com) is inactive.
-    New entry (john@new-lawfirm.com) is active.
+    Old entry (john@chenlaw.com) is inactive.
+    New entry (john.chen@legalpartners.com) is active.
 
     Sending to the old address should be blocked with a suggestion.
     """
@@ -67,17 +67,17 @@ class TestStaleContact:
     def test_stale_email_gets_blocked(self, world):
         result = world.verify(
             "send_email",
-            {"to": "john@old-lawfirm.com", "subject": "Contract", "body": "..."},
+            {"to": "john@chenlaw.com", "subject": "Contract", "body": "..."},
         )
         assert result.decision == Decision.BLOCK
         assert "inactive" in result.explanation.lower()
         assert len(result.candidates) >= 1
-        assert result.candidates[0].email == "john@new-lawfirm.com"
+        assert result.candidates[0].email == "john.chen@legalpartners.com"
 
     def test_current_email_gets_allow(self, world):
         result = world.verify(
             "send_email",
-            {"to": "john@new-lawfirm.com", "subject": "Contract", "body": "..."},
+            {"to": "john.chen@legalpartners.com", "subject": "Contract", "body": "..."},
         )
         assert result.decision == Decision.ALLOW
 
@@ -85,9 +85,12 @@ class TestStaleContact:
 class TestScopeBoundary:
     """
     Project Alpha is internal-only (scope=INTERNAL).
+    Project Beta is now internal-only (scope=INTERNAL).
     Tom Lee is an external client (scope=EXTERNAL).
+    David Kim is an internal contact (scope=INTERNAL).
 
-    Sending to Tom from the Alpha context violates scope boundaries.
+    Sending to external contacts from internal projects violates scope boundaries.
+    Sending to internal contacts within internal projects is allowed.
     """
 
     def test_external_contact_blocked_in_internal_project(self, world):
@@ -100,11 +103,11 @@ class TestScopeBoundary:
         assert result.decision == Decision.BLOCK
         assert "scope" in result.explanation.lower()
 
-    def test_external_contact_allowed_in_external_project(self, world):
+    def test_internal_contact_allowed_in_internal_project_beta(self, world):
         ctx = SessionContext(current_project="beta")
         result = world.verify(
             "send_email",
-            {"to": "tom@acme.com", "subject": "Beta Update", "body": "..."},
+            {"to": "david.kim@mycompany.com", "subject": "Beta Update", "body": "..."},
             context=ctx,
         )
         assert result.decision == Decision.ALLOW
